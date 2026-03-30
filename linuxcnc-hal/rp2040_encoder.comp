@@ -24,6 +24,7 @@ option extra_link_args "-lusb-1.0";
 #include <math.h>
 #include <time.h>
 
+// Protocol constants - source of truth: rp2040-firmware/usb_device.h
 #define VENDOR_ID 0x2E8A
 #define PRODUCT_ID 0xC0DE
 #define EP_IN 0x81
@@ -35,13 +36,12 @@ option extra_link_args "-lusb-1.0";
 #define VENDOR_REQUEST_GET_SCALE 0x04
 #define VENDOR_REQUEST_RESET_POSITION 0x05
 
-// Sentinel values for data validation
 #define POSITION_DATA_SENTINEL 0x3F8A7C91
 #define SCALE_DATA_SENTINEL 0x7B2D4E8F
 
 static libusb_device_handle *dev_handle = NULL;
 static libusb_context *ctx = NULL;
-static int should_exit = 0;
+static volatile sig_atomic_t should_exit = 0;
 static int last_test_mode = -1;
 static double last_scale[4] = {-1e30, -1e30, -1e30, -1e30};
 static double last_scale_fb[4] = {-1e30, -1e30, -1e30, -1e30};
@@ -219,6 +219,7 @@ void user_mainloop(void) {
                         } else if (r == LIBUSB_ERROR_NO_DEVICE || r == LIBUSB_ERROR_IO) {
                             printf("rp2040_encoder: LIBUSB_ERROR_NO_DEVICE || LIBUSB_ERROR_IO\n");
                             // Device disconnected
+                            libusb_release_interface(dev_handle, 0);
                             libusb_close(dev_handle);
                             dev_handle = NULL;
                             connected = 0;
@@ -226,6 +227,7 @@ void user_mainloop(void) {
                     } else if (r == LIBUSB_ERROR_NO_DEVICE || r == LIBUSB_ERROR_IO) {
                         printf("rp2040_encoder: LIBUSB_ERROR_NO_DEVICE || LIBUSB_ERROR_IO\n");
                         // Device disconnected
+                        libusb_release_interface(dev_handle, 0);
                         libusb_close(dev_handle);
                         dev_handle = NULL;
                         connected = 0;

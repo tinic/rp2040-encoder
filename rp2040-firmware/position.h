@@ -8,11 +8,12 @@
 #include "quadrature_encoder.h"
 
 class Position {
+ public:
+    static constexpr size_t kPositions = QuadratureEncoder::kNumEncoders;
+
  private:
     bool initialized = false;
     void init();
-
-    static constexpr size_t kPositions = QuadratureEncoder::kNumEncoders;
     std::array<double, kPositions> positions{};
     std::array<double, kPositions> scale_factors{};
     
@@ -23,7 +24,8 @@ class Position {
         SINE_WAVE,
         CIRCULAR,
         LINEAR_RAMP,
-        RANDOM_WALK
+        RANDOM_WALK,
+        COUNT
     } test_pattern = TestPattern::SINE_WAVE;
     
     void update_from_encoders();
@@ -31,15 +33,9 @@ class Position {
     void update_test_mode();
 
  public:
-    enum class PositionError {
-        InvalidIndex,
-        NotInitialized,
-        EncoderError
-    };
-
     static Position& instance();
 
-    [[nodiscard]] bool get(uint8_t* out, size_t& bytes) const;
+    [[nodiscard]] bool get(uint8_t* out, size_t& bytes);
 
     void set(size_t pos, double value) {
         if (pos < kPositions) {

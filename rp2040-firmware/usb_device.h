@@ -24,12 +24,6 @@ class USBDevice {
     static constexpr uint32_t POSITION_DATA_SENTINEL = 0x3F8A7C91;
     static constexpr uint32_t SCALE_DATA_SENTINEL = 0x7B2D4E8F;
     
-    enum class USBError {
-        NotInitialized,
-        TransmissionFailed,
-        DeviceNotReady
-    };
-
     static USBDevice& instance();
 
     void init();

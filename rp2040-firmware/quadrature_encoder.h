@@ -16,12 +16,6 @@ class QuadratureEncoder {
     static constexpr uint kBasePin = 0;
     static constexpr uint kPinsPerEncoder = 2;
 
-    enum class EncoderError {
-        InvalidIndex,
-        NotInitialized,
-        PIOError
-    };
-
     static QuadratureEncoder& instance();
 
     void init();
@@ -34,7 +28,7 @@ class QuadratureEncoder {
     
     void set_count(size_t encoder_idx, int32_t new_count);
 
-    constexpr void set_max_step_rate(int max_rate) {
+    void set_max_step_rate(int max_rate) {
         max_step_rate = max_rate;
     }
 

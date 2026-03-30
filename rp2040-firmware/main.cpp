@@ -11,12 +11,14 @@
 #include "usb_device.h"
 #include "ws2812_led.h"
 
+static constexpr uint STATUS_LED_PIN = 8;
+
 int main() {
     WS2812Led::instance().set_blue();
 
-    gpio_init(8);
-    gpio_set_dir(8, GPIO_OUT);
-    gpio_put(8, 1);
+    gpio_init(STATUS_LED_PIN);
+    gpio_set_dir(STATUS_LED_PIN, GPIO_OUT);
+    gpio_put(STATUS_LED_PIN, 1);
 
     USBDevice::instance();
 

@@ -21,15 +21,15 @@ void Position::init() {
     initialized = true;
 }
 
-bool Position::get(uint8_t* out, size_t& bytes) const {
+bool Position::get(uint8_t* out, size_t& bytes) {
     if (!initialized) {
         return false;
     }
     
     if (test_mode) {
-        const_cast<Position*>(this)->update_test_mode();
+        update_test_mode();
     } else {
-        const_cast<Position*>(this)->update_from_encoders();
+        update_from_encoders();
     }
     
     bytes = sizeof(uint32_t) + sizeof(positions);
@@ -76,7 +76,7 @@ void Position::enable_test_mode(bool enable) {
 }
 
 void Position::set_test_pattern(uint8_t pattern) {
-    if (pattern < 4) {
+    if (pattern < static_cast<uint8_t>(TestPattern::COUNT)) {
         test_pattern = static_cast<TestPattern>(pattern);
         if (test_mode) {
             test_mode_start_time = to_ms_since_boot(get_absolute_time());

@@ -77,14 +77,16 @@ void QuadratureEncoder::get_all_counts(std::array<int32_t, kNumEncoders>& counts
 }
 
 void QuadratureEncoder::get_count(size_t encoder_idx, int32_t& count) const {
+    if (encoder_idx >= kNumEncoders) return;
     count = positions[encoder_idx] - count_offsets[encoder_idx];
 }
 
 void QuadratureEncoder::reset_count(size_t encoder_idx) {
+    if (encoder_idx >= kNumEncoders) return;
     count_offsets[encoder_idx] = positions[encoder_idx];
 }
 
 void QuadratureEncoder::set_count(size_t encoder_idx, int32_t new_count) {
-    // Set offset so that current position - offset = new_count
+    if (encoder_idx >= kNumEncoders) return;
     count_offsets[encoder_idx] = positions[encoder_idx] - new_count;
 }

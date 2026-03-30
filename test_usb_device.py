@@ -10,16 +10,14 @@ import struct
 import time
 import sys
 
-# USB device identifiers
-VENDOR_ID = 0x2E8A  # Raspberry Pi Foundation (RP2040)
-PRODUCT_ID = 0xC0DE  # Our custom product ID
+# Protocol constants - source of truth: rp2040-firmware/usb_device.h
+VENDOR_ID = 0x2E8A
+PRODUCT_ID = 0xC0DE
 
-# Request codes
 VENDOR_REQUEST_GET_POSITION = 0x01
 VENDOR_REQUEST_SET_TEST_MODE = 0x02
 VENDOR_REQUEST_GET_SCALE = 0x04
 
-# Sentinel values for data validation
 POSITION_DATA_SENTINEL = 0x3F8A7C91
 SCALE_DATA_SENTINEL = 0x7B2D4E8F
 
@@ -141,7 +139,7 @@ def get_position_fast(dev):
     except usb.core.USBTimeoutError:
         pass  # Timeout is normal, just return None
     except Exception as e:
-        pass  # Silently ignore errors in fast mode
+        sys.stderr.write(f"USB error in fast read: {e}\n")
         
     return None
 

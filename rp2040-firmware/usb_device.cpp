@@ -85,11 +85,11 @@ void USBDevice::task() {
                         }
                         break;
                     case VENDOR_REQUEST_SET_SCALE:
-                        if (i + 9 <= count) {
+                        if (i + 10 <= count) {
                             uint8_t encoder_index = request_buf[i + 1];
                             double scale;
                             memcpy(&scale, &request_buf[i + 2], sizeof(double));
-                            if (encoder_index < 4) {
+                            if (encoder_index < Position::kPositions) {
                                 Position::instance().set_scale(encoder_index, scale);
                             }
                             i += 9;
@@ -101,7 +101,7 @@ void USBDevice::task() {
                     case VENDOR_REQUEST_RESET_POSITION:
                         if (i + 1 < count) {
                             uint8_t encoder_index = request_buf[i + 1];
-                            if (encoder_index < 4) {
+                            if (encoder_index < Position::kPositions) {
                                 (void)Position::instance().reset_encoder(encoder_index);
                             }
                             i++;
@@ -151,7 +151,7 @@ bool USBDevice::send_scale_data() {
     uint32_t sentinel = SCALE_DATA_SENTINEL;
     memcpy(buffer.data(), &sentinel, sizeof(sentinel));
     
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < Position::kPositions; i++) {
         double scale = pos.get_scale(i);
         memcpy(&buffer[sizeof(sentinel) + i * sizeof(double)], &scale, sizeof(double));
     }
