@@ -75,7 +75,7 @@ void QuadratureEncoder::setup_dma() {
         channel_config_set_write_increment(&ctrl_cfg, false);
 
         dma_channel_configure(dma_ctrl_chans[i], &ctrl_cfg, &dma_hw->ch[dma_data_chans[i]].al2_write_addr_trig,
-                              static_cast<const void*>(&dma_dst_ptrs[i]), 1, false);
+                              reinterpret_cast<const volatile void*>(&dma_dst_ptrs[i]), 1, false);
     }
 }
 
