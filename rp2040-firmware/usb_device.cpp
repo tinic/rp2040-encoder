@@ -34,7 +34,7 @@ char const* string_desc_arr[] = {
     (const char[]){0x09, 0x04},
     "RP2040",
     "Quadrature Encoder",
-    "4ENC-" GIT_SHORT_SHA "-" GIT_COMMIT_DATE_SHORT,
+    "4ENC-" GIT_VERSION,
 };
 
 USBDevice& USBDevice::instance() {

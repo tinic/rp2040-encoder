@@ -1,0 +1,61 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rp2040-firmware/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'rp2040-firmware/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib \
+            cmake \
+            build-essential \
+            python3
+
+      - name: Configure
+        working-directory: rp2040-firmware
+        run: cmake -B build
+
+      - name: Build
+        working-directory: rp2040-firmware/build
+        run: make -j$(nproc)
+
+      - name: Record version
+        id: version
+        working-directory: rp2040-firmware
+        run: |
+          DESC=$(git describe --tags --always --dirty)
+          echo "describe=${DESC}" >> "$GITHUB_OUTPUT"
+          echo "Built version: ${DESC}"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rp2040-hal-encoder-${{ steps.version.outputs.describe }}
+          path: |
+            rp2040-firmware/build/rp2040-hal-encoder.uf2
+            rp2040-firmware/build/rp2040-hal-encoder.elf
+          if-no-files-found: error
+          retention-days: 30

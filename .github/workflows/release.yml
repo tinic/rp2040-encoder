@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (must already exist)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          ref: ${{ steps.tag.outputs.name }}
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib \
+            cmake \
+            build-essential \
+            python3
+
+      - name: Configure
+        working-directory: rp2040-firmware
+        run: cmake -B build
+
+      - name: Build
+        working-directory: rp2040-firmware/build
+        run: make -j$(nproc)
+
+      - name: Stage release artifacts
+        id: stage
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          mkdir -p dist
+          cp rp2040-firmware/build/rp2040-hal-encoder.uf2 "dist/rp2040-hal-encoder-${TAG}.uf2"
+          cp rp2040-firmware/build/rp2040-hal-encoder.elf "dist/rp2040-hal-encoder-${TAG}.elf"
+          tar -czf "dist/linuxcnc-hal-${TAG}.tar.gz" linuxcnc-hal/
+          ls -lh dist/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/rp2040-hal-encoder-*.uf2
+            dist/rp2040-hal-encoder-*.elf
+            dist/linuxcnc-hal-*.tar.gz
