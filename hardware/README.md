@@ -1,190 +1,223 @@
 # Hardware Setup - RP2040 Quadrature Encoder Interface
 
-This document describes the hardware setup for the RP2040-based USB quadrature encoder interface for LinuxCNC DRO (Digital Readout) systems.
+This document describes the hardware setup for the RP2040-based USB
+quadrature encoder interface for LinuxCNC DRO (Digital Readout) systems.
 
 ## Overview
 
-The system reads up to 4 quadrature encoders and provides position data over USB to LinuxCNC. It uses PIO state machines for high-speed, accurate encoder counting with 32-bit signed position counters.
+The system reads 3 quadrature encoders (X, Y, Z) and reports position
+over USB to LinuxCNC. PIO state machines on the RP2040 do the edge
+counting; a DMA reload pair per channel drains the PIO RX FIFOs into
+memory with zero CPU involvement. Encoder signals cross a 5 kVrms
+galvanic isolation barrier (ISO7760FDBQR) before reaching the RP2040
+GPIOs, protecting the USB host from machine-side electrical events.
+
+The firmware also supports a 4th encoder channel on GPIO 6/7 (rotary
+A-axis), but that channel is **not** wired through on the isolation
+board described here — the ISO7760FDBQR has exactly 6 forward channels,
+fully consumed by 3 axes × 2 quadrature lines.
 
 ## Required Components
 
-### Core Components
-- **Waveshare RP2040 Zero** - Compact RP2040 board with built-in WS2812 RGB LED
-- **TXS0108E** - 8-channel bidirectional level shifter breakout board
-- **10-Pin 2.54mm Pitch PCB Mount Screw Terminal Block** - For encoder connections
-- **Glass scales** - Linear encoders from existing DRO system
-- **TOAUTO Digital Readout (DRO)** - Existing DRO with 9-pin connector
-- **Jienk DB9 Male to Female Terminal Breakout Board** - For signal interception
+| Component | Notes |
+|-----------|-------|
+| **Waveshare RP2040 Zero** | Compact RP2040 board with built-in WS2812 RGB status LED |
+| **ISO7760FDBQR** | TI 6-channel forward digital isolator, SSOP-16, default-LOW (the *F* suffix) |
+| 10-pin 2.54 mm PCB terminal block | Encoder cable terminations |
+| Glass scales / TTL quadrature encoders | 5 V A/B signals |
+| TOAUTO DRO (optional) | Original DRO; can run in parallel via DB9 taps |
+| Jienk DB9 M/F breakout boards | One per axis, used to tap scale signals without cutting cables |
 
-### Connection Method
-This setup intercepts the signals between existing glass scales and the TOAUTO DRO unit. The DB9 breakout boards allow you to tap into the encoder signals without cutting cables, maintaining the original DRO functionality while adding LinuxCNC capability. The TXS0108E level shifter enables signal passthrough to the DRO while providing safe 3.3V levels for the RP2040.
+### Connection Strategy
+
+The existing glass scale ↔ TOAUTO DRO link is intercepted with DB9
+breakout boards. A/B signals branch off to the terminal block on the
+RP2040 enclosure; the scales stay wired to the DRO so the original
+display continues to work. The ISO7760FDBQR sits in the RP2040 enclosure
+and isolates the machine's electrical environment from the USB host PC.
 
 ## Pin Assignments
 
-### Quadrature Encoder Connections
-The system uses GPIO pins 0-7 for encoder inputs:
+### Quadrature Encoder Inputs
 
-| Encoder | Axis | GPIO A | GPIO B | Description |
-|---------|------|--------|--------|-------------|
-| 0       | X    | 0      | 1      | X-axis linear scale |
-| 1       | Y    | 2      | 3      | Y-axis linear scale |
-| 2       | Z    | 4      | 5      | Z-axis linear scale |
-| 3       | A    | 6      | 7      | A-axis rotary encoder |
+| Encoder | Axis | RP2040 GPIO | ISO7760F output | ISO7760F input | Terminal |
+|---------|------|-------------|-----------------|----------------|----------|
+| 0       | X    | GPIO 0 (A)  | OUTA (pin 15)   | INA (pin 2)    | A        |
+| 0       | X    | GPIO 1 (B)  | OUTB (pin 14)   | INB (pin 3)    | B        |
+| 1       | Y    | GPIO 2 (A)  | OUTC (pin 13)   | INC (pin 4)    | A        |
+| 1       | Y    | GPIO 3 (B)  | OUTD (pin 12)   | IND (pin 5)    | B        |
+| 2       | Z    | GPIO 4 (A)  | OUTE (pin 11)   | INE (pin 6)    | A        |
+| 2       | Z    | GPIO 5 (B)  | OUTF (pin 10)   | INF (pin 7)    | B        |
 
-## Level Shifter Setup (TXS0108E)
+Power and ground:
 
-The TXS0108E is used to interface between the RP2040 (3.3V) and encoder signals (typically 5V):
+| ISO7760F pin | Net          | Notes                          |
+|--------------|--------------|--------------------------------|
+| VCC1 (pin 1) | +5 V         | Encoder side, from DRO supply  |
+| GND1 (pin 8) | Machine GND  | Encoder side                   |
+| VCC2 (pin 16)| +3.3 V       | RP2040 side, from `3V3` pin    |
+| GND2 (pin 9) | RP2040 GND   | RP2040 side                    |
 
-### TXS0108E Connections
-```
-Waveshare RP2040 Zero       TXS0108E          Terminal Block (10-pin)
-─────────────────────       ────────          ──────────────────────
-Pin 30 (3V3)    ─────────── VCCA  VCCB ───────── Pin 0 (+5V Supply)           
-Pin 0  (GPIO 0) ─────────── A1    B1 ─────────── Pin 1 (Encoder 0 A)
-Pin 1  (GPIO 1) ─────────── A2    B2 ─────────── Pin 2 (Encoder 0 B)
-Pin 2  (GPIO 2) ─────────── A3    B3 ─────────── Pin 3 (Encoder 1 A)
-Pin 3  (GPIO 3) ─────────── A4    B4 ─────────── Pin 4 (Encoder 1 B)
-Pin 4  (GPIO 4) ─────────── A5    B5 ─────────── Pin 5 (Encoder 2 A)
-Pin 5  (GPIO 5) ─────────── A6    B6 ─────────── Pin 6 (Encoder 2 B)
-Pin 6  (GPIO 6) ─────────── A7    B7 ─────────── Pin 7 (Encoder 3 A)
-Pin 7  (GPIO 7) ─────────── A8    B8 ─────────── Pin 8 (Encoder 3 B)
-Pin 8  (GPIO 8) ─────────── OE              
-Pin 31 (GND)    ───────────      GND ────────── Pin 9 (Common GND)
-                                  
-```
+Decoupling: 0.1 µF from VCC1→GND1 and VCC2→GND2, placed close to the
+package.
 
-**Note**: The A-side of the TXS0108E is directly soldered to pins 0-8 of the Waveshare RP2040 Zero. GND and 3V3 need to be wired by hand.
+## ISO7760FDBQR Setup
 
-### Level Shifter Notes
-- OE (Output Enable) pin is set HIGH to enable bidirectional level shifting
-- This allows glass scale signals to pass through to the TOAUTO DRO while providing 3.3V levels to the RP2040
-- The RP2040 GPIO pins are configured as inputs only, preventing any interference with the encoder signals
-- The TXS0108E provides proper signal isolation and level conversion between 5V and 3.3V systems
+The ISO7760FDBQR is a **unidirectional** 6-channel digital isolator: all
+6 channels go INA-F → OUTA-F. The encoder side must be wired to the
+**input pins** (pins 2–7), and the RP2040 side to the **output pins**
+(pins 10–15). Reversing this will not work — there is no auto-direction
+detection like the older parts.
 
-## Encoder Specifications
+### Default-LOW behavior (the *F* suffix)
 
-### Supported Encoder Types
-- **Glass scales** (linear encoders)
-- **Rotary encoders** (optical, magnetic)
-- **Incremental encoders** with A/B quadrature outputs
+The `F` in `ISO7760FDBQR` is load-bearing:
 
-### Signal Requirements
-- **Voltage levels**: Typically 5V logic (level-shifted to 3.3V)
-- **Signal type**: Differential or single-ended quadrature
-- **Frequency**: Up to several MHz (limited by PIO state machine speed)
+- **With F (this part)**: outputs go **LOW** when the input pin is
+  floating, when VCC1 is unpowered, or when the input cable is
+  disconnected.
+- **Without F**: outputs would go **HIGH** in the same conditions.
+
+This matters at startup and during scale disconnect events. If the
+scales are unpowered or their cables aren't yet biased while the RP2040
+side is alive, the RP2040 sees `A=0, B=0` on every channel. When the
+scales come up at their true logic levels (often `A=0, B=1` or `A=1,
+B=0`), the PIO observes a `00 → 01` or `00 → 10` transition and records
+a **spurious ±1 count** before any real motion has occurred. The same
+happens in reverse on power-down.
+
+Mitigation: zero the affected axes from LinuxCNC after every full
+power-up cycle, or sequence scale power and USB connect so that the
+scales are biased before the RP2040 enumerates. Verify you have the
+**F variant** physically — the standard ISO7760 (no F) inverts this
+behavior and produces opposite-polarity startup glitches.
+
+### Why no internal pulls
+
+The ISO7760F outputs are CMOS push-pull (~20 Ω driver, ±15 mA absolute
+max), strong enough to drive RP2040 GPIO inputs directly with no
+external resistors. The firmware leaves the RP2040 internal pulls
+disabled (`gpio_set_pulls(pin, false, false)` in
+`quadrature_encoder.pio`).
+
+If your encoders are **open-collector / open-drain** rather than
+push-pull TTL, add 1–10 kΩ pull-ups to +5 V on the **input side** of the
+ISO7760F (between the terminal block and pins 2–7). Most modern TTL
+scales are push-pull and don't need this.
 
 ## TOAUTO DRO Integration
 
-### DB9 Connector Pinout (Per Axis)
-The TOAUTO Digital Readout has one 9-pin DB9 connector per axis. Each connector uses the same pinout:
+### DB9 Pinout (per axis)
 
-| Pin | Signal | Description |
-|-----|--------|-------------|
-| 1   | +5V    | Power supply |
-| 2   | 0V     | Ground |
-| 3   | A      | Quadrature A channel (TTL) |
-| 4   | B      | Quadrature B channel (TTL) |
-| 5   | NC     | Not connected |
-| 6   | NC     | Not connected |
-| 7   | NC     | Not connected |
-| 8   | NC     | Not connected |
-| 9   | NC     | Not connected |
+| Pin | Signal | Description           |
+|-----|--------|-----------------------|
+| 1   | +5 V   | Power supply          |
+| 2   | 0 V    | Ground                |
+| 3   | A      | Quadrature A (TTL)    |
+| 4   | B      | Quadrature B (TTL)    |
+| 5–9 | NC     | Not connected         |
 
-**Signal Type**: TTL square wave signals (0V/5V logic levels)
+### Per-axis wiring
 
-### Signal Interception Strategy
-For each axis you want to monitor:
-1. Use one Jienk DB9 Male to Female Terminal Breakout Board per axis
-2. Connect glass scale to the **Female DB9** connector
-3. Connect TOAUTO DRO to the **Male DB9** connector  
-4. Tap into pins 3 and 4 (A and B channels) for encoder signals
-5. Use pin 1 (+5V) and pin 2 (GND) for power connections
+For each of X, Y, Z:
 
-### DB9 to Terminal Block Wiring
-From each DB9 breakout board terminal block:
-- **Pin 1 (+5V)** → Terminal block pin 10 (shared +5V supply)
-- **Pin 2 (GND)** → Terminal block pin 9 (shared ground)
-- **Pin 3 (A signal)** → Terminal block pins 1,3,5,7 (for X,Y,Z,A respectively)
-- **Pin 4 (B signal)** → Terminal block pins 2,4,6,8 (for X,Y,Z,A respectively)
+1. Use a Jienk DB9 male/female breakout board.
+2. Glass scale → Female DB9.
+3. TOAUTO DRO → Male DB9.
+4. Tap pins 3 (A) and 4 (B) at the breakout to the RP2040 enclosure
+   terminal block.
+5. Tie all DB9 pin-2 grounds to the ISO7760F GND1 net.
+6. Tie all DB9 pin-1 +5 V together as the VCC1 net (also powers the
+   isolator's encoder side).
 
-### Multiple Axis Setup
-- **X-axis**: DB9 pins 3,4 → Terminal pins 1,2 → GPIO 0,1
-- **Y-axis**: DB9 pins 3,4 → Terminal pins 3,4 → GPIO 2,3
-- **Z-axis**: DB9 pins 3,4 → Terminal pins 5,6 → GPIO 4,5
-- **A-axis**: DB9 pins 3,4 → Terminal pins 7,8 → GPIO 6,7
+## Encoder Specifications
 
-## Assembly Instructions
+| Property          | Value                                          |
+|-------------------|------------------------------------------------|
+| Voltage levels    | 5 V TTL (isolated to 3.3 V across the barrier) |
+| Signal type       | Single-ended A/B quadrature                    |
+| Max edge rate     | ≪ 100 Mbps isolator limit; PIO sample rate ≫ any realistic encoder |
+| Channels per axis | 2 (A and B); index/Z not used                  |
 
-### 1. Prepare the RP2040 Board
-- Flash the firmware (see rp2040-firmware/README.md)
-- Test basic functionality with USB connection
+## Assembly Steps
 
-### 2. Wire the Level Shifter
-- Connect power supplies (3.3V to VCCA, 5V to VCCB)
-- Connect grounds together
-- Wire GPIO pins 0-7 to A1-A8 on TXS0108E
-- Connect GPIO 8 to OE pin (will be set HIGH to enable level shifting)
+1. Flash the firmware (see `rp2040-firmware/README.md`).
+2. Hand-wire the ISO7760FDBQR to the RP2040 Zero per the pin table
+   above. Decoupling caps as close to VCC1/VCC2 as practical.
+3. Wire the terminal block to the ISO7760F input side (pins 2–7) and to
+   the VCC1 / GND1 nets.
+4. Wire the DB9 breakouts and connect glass scale ↔ DRO through them,
+   tapping A/B/+5/GND off to the terminal block.
+5. Power the DRO, then connect USB to the host PC.
+6. Confirm enumeration as VID:PID `2e8a:c0de`.
+7. Run `test_usb_device.py` to verify counts respond to scale movement.
 
-### 3. Connect Encoders
-- Wire encoder A/B signals to B1-B8 on TXS0108E
-- Connect encoder power (typically +5V) to VCCB supply
-- Ensure all grounds are connected together
+### Build photos
 
-### 4. Test the System
-- Use the Python test script to verify encoder readings
-- Check that position values change when encoders are moved
-- Verify USB communication is working
+RP2040-Zero with the ISO7760F hand-wired alongside, feeding the terminal
+block:
+
+![Internal wiring](IMG_8394.jpg)
+
+Assembled enclosure with three DB9 axis breakouts:
+
+![Assembled device](IMG_8391.jpg)
+
+Installed in the machine, tapping the existing scale ↔ DRO cables:
+
+![In-machine installation](IMG_8388.jpg)
 
 ## Troubleshooting
 
-### No Encoder Readings
-- Check power supply connections (3.3V and 5V)
-- Verify level shifter OE pin is HIGH (enabled) during operation
-- Test encoder signals with oscilloscope or multimeter
-- Check GPIO pin assignments match firmware
-- Ensure DB9 breakout boards are properly connected between glass scales and DRO
+### No counts on any axis
+- Confirm VCC1 (5 V) and VCC2 (3.3 V) are both present, with GND1/GND2
+  tied to their respective ground references.
+- Verify the ISO7760F is the **F suffix** part (or note the inverted
+  default behavior described above).
+- Check the DB9 → terminal block A/B wiring matches the table; ISO7760F
+  input pins are 2–7, output pins are 15–10 (mirrored).
 
-### Incorrect Count Direction
-- Swap A and B signals for the affected encoder
-- Or modify scale factor to negative value in firmware
+### Counts drift after scale power cycle
+- Expected — see the default-LOW startup-glitch note above. Zero the
+  affected axis in LinuxCNC after power events.
 
-### Noise or Erratic Readings
-- Add pull-up resistors (1kΩ-10kΩ) on encoder signal lines
-- Use shielded cables for encoder connections
-- Check for proper grounding
-- Verify power supply is clean and stable
+### Counts in wrong direction
+- Swap A and B at the terminal block, **or** set a negative scale factor
+  from the host (USB `SET_SCALE` command / HAL `scale-N` pin).
 
-### USB Connection Issues
-- Check USB cable and connections
-- Verify device appears with VID:PID 2e8a:c0de
-- Try different USB port or cable
+### Erratic counts with no motion
+- Most likely an open-collector encoder without a pull-up on the input
+  side. Add 1–10 kΩ pull-ups to +5 V on the affected channels.
+- Check the scale cable shield is grounded only at one end.
 
-### DRO Not Working
-- Verify TXS0108E OE pin is HIGH to allow signal passthrough
-- Check all DB9 connections are secure
-- Test that glass scale signals reach the TOAUTO DRO (pins 3,4 on each DB9)
+### DRO continues to work but USB doesn't
+- Verify the ISO7760F output side is wired to the **RP2040** (pins
+  15–10 → GPIOs 0–5), not the encoder side. The chip is unidirectional;
+  swapping breaks it.
+
+### USB enumerates but reads fail
+- Check `dmesg` for libusb permission errors; a udev rule for VID 2e8a
+  PID c0de may be required.
 
 ## Configuration
 
-### Scale Factors
-Configure in `main.cpp` based on your encoder specifications:
+Scale factors are configured in `rp2040-firmware/main.cpp` and overridable
+at runtime via the LinuxCNC HAL `scale-N` pins:
+
 ```cpp
 pos.set_scale(0, 0.001);  // X: 0.001 mm/count (1000 counts/mm)
-pos.set_scale(1, 0.001);  // Y: 0.001 mm/count 
+pos.set_scale(1, 0.001);  // Y: 0.001 mm/count
 pos.set_scale(2, 0.001);  // Z: 0.001 mm/count
-pos.set_scale(3, 0.1);    // A: 0.1 degrees/count (10 counts/degree)
+pos.set_scale(3, 0.1);    // A: 0.1 deg/count — unused on this board
 ```
 
-### Common Scale Factor Examples
-- **Glass scales**: 1μm = 0.001 mm/count (typical)
-- **Rotary encoders**: Based on pulses per revolution
-  - 1000 PPR → 0.36°/count (360°/1000)
-  - 2500 PPR → 0.144°/count (360°/2500)
+Common defaults:
+- Glass scales: 0.001 mm/count (1 µm resolution)
+- Rotary encoders: 360 / (PPR × 4) deg/count
 
-## Safety Notes
+## Safety
 
-- Always power off the system before making wiring changes
-- Use appropriate ESD protection when handling components
-- Verify voltage levels before connecting encoders
-- Double-check wiring before applying power
-- Use proper enclosures in industrial environments
+- Power off everything before changing wiring.
+- The ISO7760F provides 5 kVrms isolation; do not bypass it by tying
+  GND1 and GND2 together.
+- Use proper enclosures and ESD handling.

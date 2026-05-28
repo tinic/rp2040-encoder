@@ -49,9 +49,8 @@ output:
 
 static inline void quadrature_encoder_program_init(PIO pio, uint sm, uint offset, uint pin, int max_step_rate)
 {
-    // Configure pins as floating inputs. The TXS0108E level shifter on the
-    // signal path provides its own pulls; enabling internal pulls would fight
-    // its auto-direction tracking circuit.
+    // Configure pins as floating inputs. The ISO7760F isolator drives CMOS
+    // push-pull (rail-to-rail, ~20 ohm), so internal pulls are unnecessary.
     pio_sm_set_consecutive_pindirs(pio, sm, pin, 2, false);
     pio_gpio_init(pio, pin);
     pio_gpio_init(pio, pin + 1);
