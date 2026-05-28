@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "hardware/irq.h"
+#include "pico/bootrom.h"
 #include "position.h"
 #include "tusb.h"
 #include "version.h"
@@ -122,6 +123,16 @@ void USBDevice::task() const {
                     }
                 }
                 break;
+            case VENDOR_REQUEST_GET_VERSION:
+                (void)send_version_data();
+                break;
+            case VENDOR_REQUEST_BOOTSEL:
+                // Reboots the RP2040 into BOOTSEL (USB mass storage) mode.
+                // Does not return; the device drops off the bus and re-
+                // enumerates as 2e8a:0003. The host should expect a
+                // disconnect.
+                reset_usb_boot(0, 0);
+                break;
             default:
                 break;
         }
@@ -143,6 +154,38 @@ bool USBDevice::send_position_data() const {
     if (!Position::instance().get(buffer.data(), bytes)) {
         return false;
     }
+
+    if (tud_vendor_n_write_available(VENDOR_INTERFACE) < buffer.size()) {
+        return false;
+    }
+
+    const uint32_t written = tud_vendor_n_write(VENDOR_INTERFACE, buffer.data(), buffer.size());
+    if (buffer.size() != written) {
+        return false;
+    }
+    tud_vendor_n_write_flush(VENDOR_INTERFACE);
+    return true;
+}
+
+bool USBDevice::send_version_data() const {
+    if (!initialized) {
+        return false;
+    }
+
+    if (!tud_vendor_n_mounted(VENDOR_INTERFACE)) {
+        return false;
+    }
+
+    // Layout: [sentinel:4][version-string zero-padded:60] = 64 bytes total.
+    static std::array<uint8_t, 64> buffer{};
+    buffer.fill(0);
+
+    const uint32_t sentinel = VERSION_DATA_SENTINEL;
+    memcpy(buffer.data(), &sentinel, sizeof(sentinel));
+
+    const char* version = GIT_VERSION;
+    const size_t version_len = std::min<size_t>(strlen(version), buffer.size() - sizeof(sentinel) - 1);
+    memcpy(buffer.data() + sizeof(sentinel), version, version_len);
 
     if (tud_vendor_n_write_available(VENDOR_INTERFACE) < buffer.size()) {
         return false;

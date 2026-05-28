@@ -66,6 +66,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     hardware_pio
     hardware_clocks
     hardware_watchdog
+    pico_bootrom
     tinyusb_device
     tinyusb_board
 )
