@@ -122,13 +122,13 @@ void Position::update_test_mode() {
         case TestPattern::RANDOM_WALK: {
             static uint32_t last_update = 0;
             static uint32_t seed = 0x12345678;
-            
+
             if (now - last_update >= 50) {
                 auto next_random = [](uint32_t& s) -> double {
                     s = (s * 1664525u + 1013904223u);
                     return ((s >> 16) & 0x7FFF) / 32768.0 - 0.5;
                 };
-                
+
                 positions[0] += next_random(seed) * 0.02;
                 positions[1] += next_random(seed) * 0.02;
                 positions[2] += next_random(seed) * 0.01;
@@ -137,5 +137,8 @@ void Position::update_test_mode() {
             }
             break;
         }
+
+        case TestPattern::COUNT:
+            break;
     }
 }

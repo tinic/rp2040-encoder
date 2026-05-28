@@ -22,6 +22,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../.gitmodules")
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
+# pico-vscode.cmake (if present) points PICO_SDK_PATH at a global SDK install
+# that may not match this project's SDK version. Override to use the bundled submodule.
+set(PICO_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/pico-sdk")
+
 set(PICO_SDK_FETCH_FROM_GIT on)
 set(CMAKE_CXX_STANDARD 23)
 
