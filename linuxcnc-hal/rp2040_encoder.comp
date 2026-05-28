@@ -149,11 +149,11 @@ void user_mainloop(void) {
                     if (r == 0) {
                         r = libusb_bulk_transfer(dev_handle, EP_IN, buffer, sizeof(buffer), &actual_length, 100);
                         if (r == 0 && actual_length >= 36) {
-                            // Validate sentinel first
-                            uint32_t *sentinel_ptr = (uint32_t*)buffer;
-                            if (*sentinel_ptr == SCALE_DATA_SENTINEL) {
-                                // Extract scale data after sentinel (4 bytes)
-                                double *scales_fb = (double*)(buffer + 4);
+                            uint32_t sentinel = 0;
+                            memcpy(&sentinel, buffer, sizeof(sentinel));
+                            if (sentinel == SCALE_DATA_SENTINEL) {
+                                double scales_fb[4];
+                                memcpy(scales_fb, buffer + 4, sizeof(scales_fb));
                                 for (int i = 0; i < 4; i++) {
                                     scale_fb(i) = scales_fb[i];
                                     last_scale_fb[i] = scales_fb[i];
@@ -199,15 +199,14 @@ void user_mainloop(void) {
                     buffer[0] = VENDOR_REQUEST_GET_POSITION;
                     r = libusb_bulk_transfer(dev_handle, EP_OUT, buffer, 1, &actual_length, 100);
                     if (r == 0) {
-                        usleep(10);
                         // Read position response
                         r = libusb_bulk_transfer(dev_handle, EP_IN, buffer, 64, &actual_length, 100);
                         if (r == 0 && actual_length >= 36) {
-                            // Validate sentinel first
-                            uint32_t *sentinel_ptr = (uint32_t*)buffer;
-                            if (*sentinel_ptr == POSITION_DATA_SENTINEL) {
-                                // Extract position data after sentinel (4 bytes)
-                                double *positions = (double*)(buffer + 4);
+                            uint32_t sentinel = 0;
+                            memcpy(&sentinel, buffer, sizeof(sentinel));
+                            if (sentinel == POSITION_DATA_SENTINEL) {
+                                double positions[4];
+                                memcpy(positions, buffer + 4, sizeof(positions));
                                 position(0) = position_multiplier * positions[0];
                                 position(1) = position_multiplier * positions[1];
                                 position(2) = position_multiplier * positions[2];
@@ -215,7 +214,9 @@ void user_mainloop(void) {
                             }
                         } else if (r == LIBUSB_ERROR_TIMEOUT) {
                             printf("rp2040_encoder: LIBUSB_ERROR_TIMEOUT\n");
-                            // No response yet, continue with last known positions
+                            // A late response would land at the head of the next
+                            // bulk-in and desync the stream; reset the EP queue.
+                            libusb_clear_halt(dev_handle, EP_IN);
                         } else if (r == LIBUSB_ERROR_NO_DEVICE || r == LIBUSB_ERROR_IO) {
                             printf("rp2040_encoder: LIBUSB_ERROR_NO_DEVICE || LIBUSB_ERROR_IO\n");
                             // Device disconnected

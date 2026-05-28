@@ -65,6 +65,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     hardware_dma
     hardware_pio
     hardware_clocks
+    hardware_watchdog
     tinyusb_device
     tinyusb_board
 )

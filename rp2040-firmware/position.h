@@ -37,12 +37,6 @@ class Position {
 
     [[nodiscard]] bool get(uint8_t* out, size_t& bytes);
 
-    void set(size_t pos, double value) {
-        if (pos < kPositions) {
-            positions[pos] = value;
-        }
-    }
-
     void set_scale(size_t pos, double scale) {
         if (pos < kPositions) {
             scale_factors[pos] = scale;

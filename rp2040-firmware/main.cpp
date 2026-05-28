@@ -4,6 +4,7 @@
 #include "hardware/gpio.h"
 #include "hardware/pll.h"
 #include "hardware/sync.h"
+#include "hardware/watchdog.h"
 #include "hardware/xosc.h"
 #include "pico/stdlib.h"
 #include "position.h"
@@ -33,7 +34,10 @@ int main() {
 
     WS2812Led::instance().set_green();
 
+    watchdog_enable(1000, true);
+
     while (1) {
         USBDevice::instance().task();
+        watchdog_update();
     }
 }

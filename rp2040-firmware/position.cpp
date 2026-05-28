@@ -18,7 +18,6 @@ Position& Position::instance() {
 
 void Position::init() {
     QuadratureEncoder::instance();
-    initialized = true;
 }
 
 bool Position::get(uint8_t* out, size_t& bytes) {

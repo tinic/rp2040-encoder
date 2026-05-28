@@ -56,59 +56,58 @@ void USBDevice::init() {
 void USBDevice::task() {
     tud_task();
 
+    // One USB transfer = one command. Inspect the opcode at request_buf[0] and
+    // treat any unknown opcode as a framing error: drop the transfer silently
+    // rather than walking byte-by-byte through it.
     while (tud_vendor_n_available(VENDOR_INTERFACE)) {
         std::array<uint8_t, 64> request_buf{};
         uint32_t count = tud_vendor_n_read(VENDOR_INTERFACE, request_buf.data(), request_buf.size());
-        if (count > 0) {
-            static bool flip = false;
-            if (flip) {
-                WS2812Led::instance().set_color(64, 64, 0);
-            } else {
-                WS2812Led::instance().set_off();
-            }
-            flip ^= 1;
-            for (uint32_t i = 0; i < count; i++) {
-                switch (request_buf[i]) {
-                    case VENDOR_REQUEST_GET_POSITION:
-                        (void)send_position_data();
-                        break;
-                    case VENDOR_REQUEST_SET_TEST_MODE:
-                        if (i + 1 < count) {
-                            uint8_t mode = request_buf[i + 1];
-                            if (mode == 0) {
-                                Position::instance().enable_test_mode(false);
-                            } else {
-                                Position::instance().enable_test_mode(true);
-                                Position::instance().set_test_pattern(mode - 1);
-                            }
-                            i++;
-                        }
-                        break;
-                    case VENDOR_REQUEST_SET_SCALE:
-                        if (i + 10 <= count) {
-                            uint8_t encoder_index = request_buf[i + 1];
-                            double scale;
-                            memcpy(&scale, &request_buf[i + 2], sizeof(double));
-                            if (encoder_index < Position::kPositions) {
-                                Position::instance().set_scale(encoder_index, scale);
-                            }
-                            i += 9;
-                        }
-                        break;
-                    case VENDOR_REQUEST_GET_SCALE:
-                        (void)send_scale_data();
-                        break;
-                    case VENDOR_REQUEST_RESET_POSITION:
-                        if (i + 1 < count) {
-                            uint8_t encoder_index = request_buf[i + 1];
-                            if (encoder_index < Position::kPositions) {
-                                (void)Position::instance().reset_encoder(encoder_index);
-                            }
-                            i++;
-                        }
-                        break;
+        if (count == 0) continue;
+
+        static bool flip = false;
+        if (flip) {
+            WS2812Led::instance().set_color(64, 64, 0);
+        } else {
+            WS2812Led::instance().set_off();
+        }
+        flip ^= 1;
+
+        switch (request_buf[0]) {
+            case VENDOR_REQUEST_GET_POSITION:
+                (void)send_position_data();
+                break;
+            case VENDOR_REQUEST_SET_TEST_MODE:
+                if (count >= 2) {
+                    uint8_t mode = request_buf[1];
+                    if (mode == 0) {
+                        Position::instance().enable_test_mode(false);
+                    } else {
+                        Position::instance().enable_test_mode(true);
+                        Position::instance().set_test_pattern(mode - 1);
+                    }
                 }
-            }
+                break;
+            case VENDOR_REQUEST_SET_SCALE:
+                if (count >= 10) {
+                    uint8_t encoder_index = request_buf[1];
+                    double scale;
+                    memcpy(&scale, &request_buf[2], sizeof(double));
+                    if (encoder_index < Position::kPositions) {
+                        Position::instance().set_scale(encoder_index, scale);
+                    }
+                }
+                break;
+            case VENDOR_REQUEST_GET_SCALE:
+                (void)send_scale_data();
+                break;
+            case VENDOR_REQUEST_RESET_POSITION:
+                if (count >= 2) {
+                    uint8_t encoder_index = request_buf[1];
+                    if (encoder_index < Position::kPositions) {
+                        (void)Position::instance().reset_encoder(encoder_index);
+                    }
+                }
+                break;
         }
     }
 }
