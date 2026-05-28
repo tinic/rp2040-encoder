@@ -129,10 +129,15 @@ bool USBDevice::send_position_data() {
         return false;
     }
 
-    uint32_t written = tud_vendor_n_write(VENDOR_INTERFACE, buffer.data(), bytes);
-    if (bytes != written) {
+    if (tud_vendor_n_write_available(VENDOR_INTERFACE) < buffer.size()) {
         return false;
     }
+
+    uint32_t written = tud_vendor_n_write(VENDOR_INTERFACE, buffer.data(), buffer.size());
+    if (buffer.size() != written) {
+        return false;
+    }
+    tud_vendor_n_write_flush(VENDOR_INTERFACE);
     return true;
 }
 
@@ -145,22 +150,26 @@ bool USBDevice::send_scale_data() {
         return false;
     }
 
-    static std::array<uint8_t, 36> buffer{};
+    static std::array<uint8_t, 64> buffer{};
     Position& pos = Position::instance();
-    
+
     uint32_t sentinel = SCALE_DATA_SENTINEL;
     memcpy(buffer.data(), &sentinel, sizeof(sentinel));
-    
+
     for (size_t i = 0; i < Position::kPositions; i++) {
         double scale = pos.get_scale(i);
         memcpy(&buffer[sizeof(sentinel) + i * sizeof(double)], &scale, sizeof(double));
+    }
+
+    if (tud_vendor_n_write_available(VENDOR_INTERFACE) < buffer.size()) {
+        return false;
     }
 
     uint32_t written = tud_vendor_n_write(VENDOR_INTERFACE, buffer.data(), buffer.size());
     if (buffer.size() != written) {
         return false;
     }
-
+    tud_vendor_n_write_flush(VENDOR_INTERFACE);
     return true;
 }
 

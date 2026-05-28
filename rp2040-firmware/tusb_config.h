@@ -54,6 +54,6 @@
 
 // Vendor FIFO size of TX and RX
 #define CFG_TUD_VENDOR_RX_BUFSIZE 64
-#define CFG_TUD_VENDOR_TX_BUFSIZE 64
+#define CFG_TUD_VENDOR_TX_BUFSIZE 256
 
 #endif  // TUSB_CONFIG_H_
