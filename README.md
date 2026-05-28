@@ -10,9 +10,7 @@ This project allows you to connect existing DRO (Digital Read Out) scales with T
 
 [<img src="./hardware/rp2040-zero.jpg" width="200px"/>](./hardware/rp2040-zero.jpg)
 
-**TXS0108E 8 Channel Logic Level Converter:**
-
-[<img src="./hardware/TXS0108E.jpg" width="200px"/>](./hardware/TXS0108E.jpg)
+**Texas Instruments ISO7760FDBQR digital isolator** (6-channel forward, SSOP-16, default-LOW *F* variant) provides 5 kVrms galvanic isolation between the machine-side electrical environment and the USB host. See [`hardware/README.md`](hardware/README.md) for the full pinout and a known startup-glitch caveat tied to the F suffix.
 
 ## Finished board
 
@@ -24,16 +22,19 @@ Spliced into the existing DRO, there are likely nicer looking solutions than thi
 
 ## Features
 
-- Supports 4 DRO scales with TTL A/B quadrature signals (X, Y, Z, A axes)
-- High-speed PIO-based encoder counting
+- 3 DRO scales (X, Y, Z) with TTL A/B quadrature signals; firmware supports a 4th channel if hardware is extended
+- High-speed PIO-based edge counting
+- DMA reload pair per channel drains the PIO RX FIFO into memory with zero CPU touch
 - 32-bit position counters
 - USB interface with LinuxCNC HAL component
-- Configurable scale factors
+- Configurable scale factors (compile-time defaults overridable at runtime over USB / HAL)
 - Test mode for development and debugging
+- Watchdog reboot on firmware hang
+- Galvanic isolation between machine and host PC
 
 ## Quick Start
 
 See the individual directories for detailed instructions:
 - [`rp2040-firmware/`](rp2040-firmware/) - RP2040 firmware
 - [`linuxcnc-hal/`](linuxcnc-hal/) - LinuxCNC HAL component
-- [`hardware/`](hardware/) - Hardware setup and wiring 
+- [`hardware/`](hardware/) - Hardware setup and wiring
