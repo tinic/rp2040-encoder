@@ -1,133 +1,168 @@
 # RP2040 Quadrature Encoder Firmware
 
-This directory contains the firmware for the RP2040-based USB quadrature encoder interface that connects with LinuxCNC through a HAL (Hardware Abstraction Layer) component.
+C++23 firmware for the RP2040-based USB quadrature encoder interface that
+mirrors a 5 V TTL DRO into LinuxCNC. See [`../hardware/README.md`](../hardware/README.md)
+for the wiring and the [`../README.md`](../README.md) for the project
+overview.
 
-## Features
+## Architecture highlights
 
-- Supports 4 quadrature encoders on GPIO pins 0-7
-- 32-bit signed position counters
-- High-speed PIO state machines for accurate encoder counting
-- USB interface with 1ms streaming capability
-- Test mode with multiple simulation patterns
-
-## Hardware Configuration
-
-### Quadrature Encoder Connections
-- Encoder 0 (X-axis): GPIO 0 (A), GPIO 1 (B)
-- Encoder 1 (Y-axis): GPIO 2 (A), GPIO 3 (B)
-- Encoder 2 (Z-axis): GPIO 4 (A), GPIO 5 (B)
-- Encoder 3 (A-axis): GPIO 6 (A), GPIO 7 (B)
-
-### Level Shifter Control
-- GPIO 8: TXS0108E Output Enable (OE) - Set HIGH to enable level shifting
-- The firmware enables the TXS0108E to allow signal passthrough to the DRO while providing safe 3.3V levels to the RP2040
-
-### Encoder Scaling
-Scale factors are configured in `main.cpp`:
-- Linear axes (X,Y,Z): Default 0.001 mm/count (1000 counts/mm)
-- Rotary axis (A): Default 0.1 degrees/count (10 counts/degree)
-
-## Requirements
-
-- Waveshare RP2040 Zero (or compatible RP2040-based board)
-- TXS0108E 8-channel bidirectional level shifter
-- CMake 3.13 or later
-- GCC ARM cross-compiler
-- Pico SDK (included as submodule)
+- PIO state machines decode A/B quadrature on GPIO 0–7 with a 16-entry
+  jump-table walker (4 SMs, one per axis).
+- A DMA reload pair per encoder drains the PIO RX FIFO into a `volatile
+  int32_t positions[N]` slot with zero CPU involvement; CPU reads
+  positions[] directly via const member functions.
+- USB vendor-class device (VID `0x2E8A`, PID `0xC0DE`) speaks the
+  request/response protocol below; framing is one command per transfer,
+  responses are padded to one EP max-packet (64 bytes), every write is
+  followed by `tud_vendor_n_write_flush`.
+- Watchdog reset at 1000 ms keeps a hung `tud_task` from wedging the
+  device; reboot triggers USB re-enumeration.
 
 ## Building
 
-1. Initialize the Pico SDK submodule:
-   ```bash
-   git submodule update --init --recursive
-   ```
+### Requirements
 
-2. Create build directory and configure:
-   ```bash
-   cd rp2040-firmware
-   mkdir -p build
-   cd build
-   cmake ..
-   ```
+- CMake 3.14 or later
+- `gcc-arm-none-eabi` cross-compiler
+- `libusb-1.0` development headers (`libusb-1.0-0-dev` on Debian/Ubuntu)
+  — needed at configure/build time to compile the USB-enabled picotool
+  used by `cmake --install`. Skip if you'll never use `cmake --install`.
+- The Pico SDK submodule (auto-initialised by CMake on first configure)
 
-3. Build the firmware:
-   ```bash
-   make
-   ```
+### Configure + build
 
-   This will generate `rp2040-hal-encoder.uf2` in the build directory.
+```bash
+cd rp2040-firmware
+cmake -B build
+cmake --build build -j
+```
+
+The build produces `build/rp2040-hal-encoder.uf2` (the flashable
+firmware) and `build/rp2040-hal-encoder.elf` (for debugging with
+`picotool info` or gdb).
+
+It also builds a separate `build/picotool-usb-build/picotool` (the
+USB-enabled picotool the install rule needs — see below). The pico-SDK
+bundles its own picotool but builds it with `PICOTOOL_NO_LIBUSB=1` (UF2
+manipulation only), so we fetch and build a second copy with USB
+support enabled.
 
 ## Flashing
 
-### Method 1: BOOTSEL Mode (Recommended)
-1. Hold the BOOTSEL button while connecting the RP2040 board to USB
-2. The RP2040 will appear as a mass storage device (RPI-RP2)
-3. Copy `build/rp2040-hal-encoder.uf2` to the device
-4. The RP2040 will automatically reboot and run the firmware
+### `cmake --install` (recommended)
 
-### Method 2: Using picotool (if installed)
 ```bash
-# Put device in BOOTSEL mode first
-picotool load build/rp2040-hal-encoder.uf2
-picotool reboot
+cmake --install build
 ```
+
+Runs the USB-enabled picotool with `load -f -x`: force-reboots the
+device into BOOTSEL if it's currently running our firmware, loads the
+new UF2, then re-launches so the device re-enumerates on the USB bus.
+
+No need to hold BOOTSEL. Just have the device plugged in.
+
+### BOOTSEL + mass storage
+
+Old-school path, no picotool needed:
+
+1. Hold the BOOTSEL button while plugging the RP2040 into USB.
+2. The device appears as `RPI-RP2` mass storage.
+3. Copy `build/rp2040-hal-encoder.uf2` onto it.
+4. Device reboots into the new firmware.
+
+The CMakeLists also provides `flash` / `flash-quick` make targets that
+do this copy automatically; see the `FLASH_DEVICE_PATH` cache variable.
 
 ## USB Protocol
 
-The device implements a vendor-specific USB interface (VID: 0x2E8A, PID: 0xC0DE) with the following commands:
+Vendor-class endpoints (VID `0x2E8A`, PID `0xC0DE`):
 
-- **0x01** - Get Position: Returns 32 bytes (4 doubles) with current position values
-- **0x02** - Start Stream: Begins continuous streaming at 1ms intervals
-- **0x03** - Stop Stream: Stops the continuous stream
-- **0x04** - Enable Test Mode: Enables test mode for simulated data
-- **0x05** - Disable Test Mode: Returns to encoder data
-- **0x06** - Set Test Pattern: Sets test pattern (0-3)
+- `EP_OUT 0x01` — host writes one command per transfer.
+- `EP_IN 0x81` — device writes one 64-byte response per transfer.
+
+### Commands (host → device)
+
+| Opcode | Name                | Payload                                | Response          |
+|--------|---------------------|----------------------------------------|-------------------|
+| `0x01` | GET_POSITION        | none                                   | 64-byte position  |
+| `0x02` | SET_TEST_MODE       | 1 byte: 0=off, 1=sine, 2=circular, 3=ramp, 4=random | none |
+| `0x03` | SET_SCALE           | 1 byte idx + 8-byte double             | none              |
+| `0x04` | GET_SCALE           | none                                   | 64-byte scale     |
+| `0x05` | RESET_POSITION      | 1 byte idx                             | none              |
+
+### Responses (device → host)
+
+Both `GET_POSITION` and `GET_SCALE` responses are exactly 64 bytes:
+
+| Offset | Size | Contents                                                                |
+|--------|------|-------------------------------------------------------------------------|
+| 0      | 4    | Sentinel: `0x3F8A7C91` for position, `0x7B2D4E8F` for scale (little-endian) |
+| 4      | 32   | 4 little-endian doubles                                                 |
+| 36     | 28   | Zero padding                                                            |
+
+The sentinel is a sanity check, not the framing primitive — framing is
+guaranteed by one-transfer-per-command and full-EP-packet responses.
 
 ## Test Mode
 
-The firmware includes test mode for development and testing:
+Four built-in patterns for development without scales attached. Enable
+in firmware via `Position::enable_test_mode(true)` + `set_test_pattern(N)`,
+or at runtime via the `SET_TEST_MODE` USB command:
 
-### Test Patterns
-- **0 - Sine Wave**: Sinusoidal motion with different frequencies per axis
-- **1 - Circular**: XY circular motion with Z oscillation and A rotation
-- **2 - Linear Ramp**: Constant velocity motion on all axes
-- **3 - Random Walk**: Random position changes simulating noise
-
-### Enabling Test Mode
-```cpp
-// In main.cpp
-pos.enable_test_mode(true);
-pos.set_test_pattern(0);  // Set desired pattern
-```
-
-## Testing
-
-Use the Python test script in the project root:
-```bash
-# Install dependencies
-pip install pyusb
-
-# Run test (requires sudo on Linux)
-python3 test_usb_device.py
-```
+| Pattern | Mode               | Notes                                            |
+|---------|--------------------|--------------------------------------------------|
+| 0       | SINE_WAVE          | Per-axis sinusoidal motion                       |
+| 1       | CIRCULAR           | XY circle, Z slow oscillation, A constant spin   |
+| 2       | LINEAR_RAMP        | Constant per-axis velocity                       |
+| 3       | RANDOM_WALK        | Small random steps simulating measurement noise  |
 
 ## Device Identification
 
-The device serial number format: `{N}ENC-{git_hash}-{build_date}`
-- N: Number of encoders (4)
-- git_hash: Current git commit hash
-- build_date: Firmware build date
+USB serial-number string format:
 
-Example: `4ENC-2d49ae7-2025-06-17`
+```
+4ENC-<git-describe>
+```
+
+Where `<git-describe>` is the output of `git describe --tags --always
+--dirty --match "v*"`. For tagged releases that's just `v1.0.0`; for
+dev builds it's e.g. `v1.0.0-3-gf7c079c` or `v1.0.0-3-gf7c079c-dirty`
+when there are uncommitted changes.
+
+## Testing
+
+Use the Python script in the repo root:
+
+```bash
+pip install pyusb
+python3 ../test_usb_device.py    # sudo on Linux unless udev rules are set
+```
 
 ## Troubleshooting
 
-1. **Build fails**: Ensure Pico SDK submodule is initialized and CMake version ≥ 3.13
+### `cmake --install` fails with "USB-enabled picotool was not built"
 
-2. **Device not recognized**: Check USB connection and verify device appears with correct VID:PID (2e8a:c0de)
+Run `cmake --build build` first; the install rule depends on a built
+picotool which the firmware target auto-triggers.
 
-3. **Position data incorrect**: Verify encoder wiring matches GPIO pin assignments
+### `picotool failed (rc=249)`
 
-4. **Flashing fails**: Ensure board is in BOOTSEL mode (hold button during USB connection)
+`No accessible RP-series devices in BOOTSEL mode were found.` Usually
+means the device isn't plugged in, or the host lacks permission. On
+Linux, install the picotool udev rules (Ubuntu's `picotool` apt package
+ships them in `/lib/udev/rules.d/`), or copy the file from
+[upstream picotool](https://github.com/raspberrypi/picotool/blob/master/udev/99-picotool.rules).
 
-For LinuxCNC HAL component usage, see `../linuxcnc-hal/README.md`.
+### `libusb.h: No such file or directory` during picotool build
+
+Install `libusb-1.0-0-dev` (Debian/Ubuntu) or your distro's equivalent.
+
+### Position drift after scale power cycle
+
+See the ISO7760F default-LOW caveat in [`../hardware/README.md`](../hardware/README.md).
+
+## LinuxCNC HAL
+
+See [`../linuxcnc-hal/README.md`](../linuxcnc-hal/README.md) for the
+LinuxCNC userspace component that consumes this firmware.

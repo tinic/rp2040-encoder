@@ -15,7 +15,7 @@ endif()
 set(PICO_BOARD waveshare_rp2040_zero CACHE STRING "Board type")
 #set(PICO_BOARD waveshare_rp2350_zero CACHE STRING "Board type")
 
-cmake_minimum_required(VERSION 3.13...3.27)
+cmake_minimum_required(VERSION 3.14...3.27)
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../.gitmodules")
     execute_process(COMMAND git submodule update --init --recursive
@@ -113,3 +113,53 @@ add_custom_target(flash-quick
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_PROJECT_NAME}.uf2 ${FLASH_DEVICE_PATH}/
     USES_TERMINAL
 )
+
+# `cmake --install <build-dir>` flashes the firmware to a connected RP2040
+# via picotool. The pico-sdk's bundled picotool (in build/_deps/picotool)
+# is hardcoded with PICOTOOL_NO_LIBUSB=1 in the SDK's Findpicotool.cmake
+# -- it can only manipulate UF2 files, not talk to devices over USB. We
+# build a second copy with USB support enabled, reusing the same
+# upstream tag as the SDK pins. Requires libusb-1.0 development headers
+# at build time (apt: libusb-1.0-0-dev).
+#
+# Flags: -f force-reboots the device from running firmware into BOOTSEL
+# mode if needed; -x re-launches the new firmware after load so the
+# device comes back up enumerated on the USB bus.
+include(ExternalProject)
+
+set(_picotool_usb_src ${CMAKE_BINARY_DIR}/picotool-usb-src)
+set(_picotool_usb_bld ${CMAKE_BINARY_DIR}/picotool-usb-build)
+
+ExternalProject_Add(picotool_usb_build
+    GIT_REPOSITORY https://github.com/raspberrypi/picotool.git
+    GIT_TAG ${picotoolVersion}
+    GIT_SHALLOW TRUE
+    SOURCE_DIR ${_picotool_usb_src}
+    BINARY_DIR ${_picotool_usb_bld}
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=Release
+        -DPICO_SDK_PATH=${PICO_SDK_PATH}
+        -DPICOTOOL_NO_LIBUSB=0
+    INSTALL_COMMAND ""
+    BUILD_BYPRODUCTS ${_picotool_usb_bld}/picotool
+)
+
+set(PICOTOOL_INSTALL_EXECUTABLE ${_picotool_usb_bld}/picotool)
+
+# Ensure the USB-enabled picotool is built as part of `all` so that
+# `cmake --install` after `cmake --build` finds the binary.
+add_dependencies(${CMAKE_PROJECT_NAME} picotool_usb_build)
+
+install(CODE "
+    if(NOT EXISTS \"${PICOTOOL_INSTALL_EXECUTABLE}\")
+        message(FATAL_ERROR \"USB-enabled picotool was not built. Did you run 'cmake --build' first? Path checked: ${PICOTOOL_INSTALL_EXECUTABLE}\")
+    endif()
+    message(STATUS \"Flashing ${CMAKE_PROJECT_NAME}.uf2 via ${PICOTOOL_INSTALL_EXECUTABLE}...\")
+    execute_process(
+        COMMAND \"${PICOTOOL_INSTALL_EXECUTABLE}\" load -f -x \"${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.uf2\"
+        RESULT_VARIABLE _rc
+    )
+    if(NOT _rc EQUAL 0)
+        message(FATAL_ERROR \"picotool failed (rc=\${_rc}). Ensure the RP2040 is connected via USB and the user has permission to access it (udev rules for 2e8a:* on Linux).\")
+    endif()
+")

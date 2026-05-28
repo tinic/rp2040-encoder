@@ -42,7 +42,8 @@ jobs:
             libstdc++-arm-none-eabi-newlib \
             cmake \
             build-essential \
-            python3
+            python3 \
+            libusb-1.0-0-dev
 
       - name: Configure
         working-directory: rp2040-firmware
