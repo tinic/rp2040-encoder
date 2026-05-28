@@ -15,16 +15,16 @@ This directory contains the LinuxCNC HAL component for interfacing with the RP20
    sudo halcompile --install rp2040_encoder.comp
    ```
 
-2. Add udev rule for USB access (create `/etc/udev/rules.d/99-rp2040-encoder.rules`):
-   ```
-   SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="c0de", MODE="0666"
-   ```
-
-3. Reload udev rules:
+2. Install the udev rule shipped in this directory so neither the HAL
+   component nor `picotool` needs root:
    ```bash
+   sudo cp 99-rp2040-encoder.rules /etc/udev/rules.d/
    sudo udevadm control --reload-rules
    sudo udevadm trigger
+   sudo usermod -a -G plugdev "$USER"   # log out / back in to apply
    ```
+   The rule grants the `plugdev` group access to the device in normal
+   operating mode (`2e8a:c0de`) and BOOTSEL mode (`2e8a:0003`).
 
 ## Usage
 
