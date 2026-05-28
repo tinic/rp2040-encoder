@@ -15,7 +15,9 @@ GPIOs, protecting the USB host from machine-side electrical events.
 The firmware also supports a 4th encoder channel on GPIO 6/7 (rotary
 A-axis), but that channel is **not** wired through on the isolation
 board described here — the ISO7760FDBQR has exactly 6 forward channels,
-fully consumed by 3 axes × 2 quadrature lines.
+fully consumed by 3 axes × 2 quadrature lines. GPIO 6 and GPIO 7 are
+tied to GND on the board so the 4th PIO state machine sees a stable
+`00` input and reports a fixed zero position; no phantom counts.
 
 ## Required Components
 
