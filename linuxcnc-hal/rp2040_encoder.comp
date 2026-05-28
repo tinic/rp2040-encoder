@@ -8,6 +8,7 @@ pin in s32 test-mode "Test mode: 0=off, 1=sine wave, 2=circular, 3=linear ramp, 
 pin out float scale-fb-#[4] = -1e30 "Scale factor for each encoder";
 pin in float scale-#[4] "Scale factor for each encoder";
 pin in u32 reset-#[4] "Reset encoder position to zero (change in value triggered)";
+pin in s32 sign-#[4] = 1 "Per-axis sign: +1 normal, -1 inverts the position output";
 
 option userspace yes;
 option extra_link_args "-lusb-1.0";
@@ -51,8 +52,6 @@ static double last_scale[4] = {-1e30, -1e30, -1e30, -1e30};
 static double last_scale_fb[4] = {-1e30, -1e30, -1e30, -1e30};
 static int last_reset[4] = {0, 0, 0, 0};
 static double invalid_scale_value = -1e30;
-
-static double position_multiplier = -1.0;
 
 static void signal_handler(int /*sig*/) {
     should_exit = 1;
@@ -151,9 +150,16 @@ void user_mainloop(void) {
                         // Reset test mode tracking to force resend
                         last_test_mode = -1;
 
-                        // Reset scale tracking to trigger initial read
+                        // Reset scale tracking to trigger initial read. Both
+                        // last_scale (host -> device sync) and last_scale_fb
+                        // (device -> host feedback) must be invalidated: the
+                        // feedback gate at the top of the dev_handle block
+                        // checks last_scale_fb, so leaving stale values from
+                        // the prior session there means GET_SCALE is never
+                        // re-issued after a replug.
                         for (int i = 0; i < 4; i++) {
                             last_scale[i] = invalid_scale_value;
+                            last_scale_fb[i] = invalid_scale_value;
                         }
 
                         // Give device time to initialize
@@ -162,6 +168,11 @@ void user_mainloop(void) {
                     }
                 } else {
                     connected = 0;
+                    // Disconnected: back off from the 1 ms outer cadence so
+                    // libusb_open_device_with_vid_pid is not walking sysfs
+                    // ~1000x/sec while no device is present. 200 ms keeps
+                    // replug latency well under what a human notices.
+                    usleep(200000);
                 }
             }
             
@@ -231,10 +242,13 @@ void user_mainloop(void) {
                             if (sentinel == POSITION_DATA_SENTINEL) {
                                 double positions[4];
                                 memcpy(positions, buffer + 4, sizeof(positions));
-                                position(0) = position_multiplier * positions[0];
-                                position(1) = position_multiplier * positions[1];
-                                position(2) = position_multiplier * positions[2];
-                                position(3) = position_multiplier * positions[3];
+                                // Treat any non-negative sign pin as +1; only
+                                // an explicit -1 inverts. Guards against a
+                                // user accidentally setting sign to 0 and
+                                // silently zeroing the axis.
+                                for (int i = 0; i < 4; i++) {
+                                    position(i) = (sign(i) < 0 ? -1.0 : 1.0) * positions[i];
+                                }
                             }
                         } else if (r == LIBUSB_ERROR_TIMEOUT) {
                             printf("rp2040_encoder: LIBUSB_ERROR_TIMEOUT\n");

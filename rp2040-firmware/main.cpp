@@ -11,10 +11,12 @@ int main() {
 
     Position& pos = Position::instance();
 
-    pos.set_scale(0, 0.001);
-    pos.set_scale(1, 0.001);
-    pos.set_scale(2, 0.001);
-    pos.set_scale(3, 0.1);
+    if (pos.should_apply_defaults()) {
+        pos.set_scale(0, 0.001);
+        pos.set_scale(1, 0.001);
+        pos.set_scale(2, 0.001);
+        pos.set_scale(3, 0.1);
+    }
 
     pos.enable_test_mode(false);
 

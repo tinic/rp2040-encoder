@@ -19,6 +19,11 @@ class Position {
     std::array<double, kPositions> positions{};
     std::array<double, kPositions> scale_factors{};
 
+    // True iff init() pulled a valid blob from flash. Read once at boot via
+    // should_apply_defaults() to decide whether main.cpp's compile-time
+    // defaults should overwrite the loaded values. Not maintained after init.
+    bool config_loaded = false;
+
     bool config_dirty = false;
     uint32_t config_dirty_since_ms = 0;
 
@@ -43,6 +48,15 @@ class Position {
     [[nodiscard]] bool get(uint8_t* out, size_t& bytes);
 
     void set_scale(size_t pos, double scale);
+
+    // True at boot when init() found NO valid persisted config. main.cpp
+    // gates its compile-time defaults on this so that USB-set scales are
+    // not silently clobbered on the next boot. Phrased positively
+    // ("should I apply defaults?") so the call site cannot be inverted by
+    // accident — the wrong direction would wipe flash on every reboot.
+    [[nodiscard]] bool should_apply_defaults() const {
+        return !config_loaded;
+    }
 
     [[nodiscard]] double get_scale(size_t pos) const {
         if (pos < kPositions) {

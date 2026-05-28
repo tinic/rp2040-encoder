@@ -6,6 +6,7 @@
 
 #include "hardware/irq.h"
 #include "pico/bootrom.h"
+#include "pico/unique_id.h"
 #include "position.h"
 #include "tusb.h"
 #include "version.h"
@@ -40,13 +41,33 @@ constexpr char lang_id[2] = {0x09, 0x04};
 // tud_descriptor_string_cb. The array-to-pointer decay on `lang_id` is
 // intentional and the cleanest way to store a fixed-size raw 2-byte LANGID
 // alongside null-terminated strings.
+//
+// Index 3 (iSerialNumber) is intentionally NOT in this table — it is built
+// at runtime from the RP2040's flash JEDEC ID so the serial is stable across
+// firmware builds (udev rules and per-unit naming would otherwise break on
+// every rebuild) and unique across multiple connected units. The firmware
+// version is still reportable via VENDOR_REQUEST_GET_VERSION.
 const char* const string_desc_arr[] = {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay,hicpp-no-array-decay)
     lang_id,
     "RP2040",
     "Quadrature Encoder",
-    "4ENC-" GIT_VERSION,
 };
+
+constexpr size_t kSerialPrefixLen = 5;  // "4ENC-"
+constexpr size_t kSerialBufLen = kSerialPrefixLen + (2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES) + 1;
+
+const char* get_serial_string() {
+    static std::array<char, kSerialBufLen> buf{};
+    static bool ready = false;
+    if (!ready) {
+        memcpy(buf.data(), "4ENC-", kSerialPrefixLen);
+        pico_get_unique_board_id_string(buf.data() + kSerialPrefixLen,
+                                        static_cast<uint>(kSerialBufLen - kSerialPrefixLen));
+        ready = true;
+    }
+    return buf.data();
+}
 
 }  // namespace
 
@@ -258,11 +279,17 @@ const uint16_t* tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
         memcpy(&desc_str[1], string_desc_arr[0], 2);
         chr_count = 1;
     } else {
-        if (index >= sizeof(string_desc_arr) / sizeof(string_desc_arr[0])) {
+        const char* str = nullptr;
+        if (index == 3) {
+            // iSerialNumber: built from the RP2040's flash JEDEC ID, stable
+            // across firmware rebuilds.
+            str = get_serial_string();
+        } else if (index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])) {
+            str = string_desc_arr[index];
+        } else {
             return nullptr;
         }
 
-        const char* str = string_desc_arr[index];
         const size_t len = strlen(str);
         chr_count = static_cast<uint8_t>(std::min<size_t>(len, 31));
 

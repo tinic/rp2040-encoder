@@ -19,11 +19,13 @@ Position& Position::instance() {
 
 void Position::init() {
     QuadratureEncoder::instance();
-    // Best effort: if the flash sector holds a valid blob, those values
-    // override the compile-time defaults set in main.cpp. If not (first
-    // boot, corruption, schema mismatch), scale_factors keeps whatever
-    // main.cpp will write next via set_scale().
-    (void)PersistentConfig::load(scale_factors);
+    // If the flash sector holds a valid blob, those values override the
+    // compile-time defaults in main.cpp; main.cpp reads should_apply_defaults()
+    // and skips its set_scale() calls when load() succeeded. Without that gate
+    // the dedup in set_scale() only no-ops when the persisted value happens
+    // to equal the hardcoded default — every other USB-set scale would be
+    // silently overwritten on the next boot.
+    config_loaded = PersistentConfig::load(scale_factors);
 }
 
 void Position::set_scale(size_t pos, double scale) {

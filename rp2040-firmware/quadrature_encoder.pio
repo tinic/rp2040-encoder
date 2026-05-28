@@ -87,24 +87,5 @@ static inline void quadrature_encoder_program_init(PIO pio, uint sm, uint offset
     pio_sm_exec(pio, sm, pio_encode_mov(pio_isr, pio_null));
     
     pio_sm_set_enabled(pio, sm, true);
-} 
-
-// This is just a placeholder - actual implementation is in quadrature_encoder.cpp
-// to access the last_positions array
-static inline int32_t quadrature_encoder_get_count(PIO pio, uint sm)
-{
-    // This should not be called directly - use QuadratureEncoder::get_count instead
-    return 0;
-}
-
-// These functions are kept for compatibility but modified for the new implementation
-static inline void quadrature_encoder_request_count(PIO pio, uint sm)
-{
-    // Not needed - PIO continuously pushes counts
-}
-
-static inline int32_t quadrature_encoder_fetch_count(PIO pio, uint sm)
-{
-    return quadrature_encoder_get_count(pio, sm);
 }
 %}

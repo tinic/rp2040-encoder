@@ -18,11 +18,9 @@ class QuadratureEncoder {
 
     void init();
 
-    void get_count(size_t encoder_idx, int32_t& count) const;
     void get_all_counts(std::array<int32_t, kNumEncoders>& counts) const;
 
     void reset_count(size_t encoder_idx);
-    void set_count(size_t encoder_idx, int32_t new_count);
 
  private:
     QuadratureEncoder() = default;

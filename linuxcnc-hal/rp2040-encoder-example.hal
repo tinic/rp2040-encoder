@@ -34,6 +34,16 @@ setp rp2040_encoder.0.scale-1 0.001  # Y axis: 0.001 mm per count
 setp rp2040_encoder.0.scale-2 0.001  # Z axis: 0.001 mm per count
 setp rp2040_encoder.0.scale-3 0.1    # A axis: 0.1 degrees per count
 
+# Per-axis sign: default +1. Set to -1 for any axis whose mechanical "forward"
+# direction does not match the encoder count-up direction (depends on how the
+# A/B pair is wired vs. axis orientation). Pre-2026 builds applied a global -1
+# multiplier; if you are upgrading and your axes now move the wrong way, add
+# the four setp lines below.
+# setp rp2040_encoder.0.sign-0 -1
+# setp rp2040_encoder.0.sign-1 -1
+# setp rp2040_encoder.0.sign-2 -1
+# setp rp2040_encoder.0.sign-3 -1
+
 # Reset pins - rising edge triggers position reset to zero
 # Connect these to UI buttons or other controls
 # net x-zero-button => rp2040_encoder.0.reset-0
