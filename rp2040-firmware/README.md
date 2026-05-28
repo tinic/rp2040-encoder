@@ -87,9 +87,12 @@ Vendor-class endpoints (VID `0x2E8A`, PID `0xC0DE`):
 |--------|---------------------|----------------------------------------|-------------------|
 | `0x01` | GET_POSITION        | none                                   | 64-byte position  |
 | `0x02` | SET_TEST_MODE       | 1 byte: 0=off, 1=sine, 2=circular, 3=ramp, 4=random | none |
-| `0x03` | SET_SCALE           | 1 byte idx + 8-byte double             | none              |
+| `0x03` | SET_SCALE           | 1 byte idx + 8-byte double; auto-persists after 1 s debounce | none |
 | `0x04` | GET_SCALE           | none                                   | 64-byte scale     |
 | `0x05` | RESET_POSITION      | 1 byte idx                             | none              |
+| `0x06` | GET_VERSION         | none                                   | 64-byte version   |
+| `0x07` | BOOTSEL             | none; reboots into BOOTSEL (2e8a:0003) | (device drops off bus) |
+| `0x08` | RESET_CONFIG        | none; erases the persisted scales blob; takes effect on next boot | none |
 
 ### Responses (device → host)
 
@@ -101,8 +104,37 @@ Both `GET_POSITION` and `GET_SCALE` responses are exactly 64 bytes:
 | 4      | 32   | 4 little-endian doubles                                                 |
 | 36     | 28   | Zero padding                                                            |
 
+`GET_VERSION` response (also 64 bytes):
+
+| Offset | Size | Contents                                                                |
+|--------|------|-------------------------------------------------------------------------|
+| 0      | 4    | Sentinel `0x5A1B9C3D` (little-endian)                                   |
+| 4      | 60   | Zero-padded ASCII `GIT_VERSION` (`v1.0.0`, `v1.0.0-3-gabc-dirty`, ...)  |
+
 The sentinel is a sanity check, not the framing primitive — framing is
 guaranteed by one-transfer-per-command and full-EP-packet responses.
+
+## Persistent configuration
+
+Scale factors (per-encoder counts-per-unit, set via `SET_SCALE`) are
+written to the last 4 KiB sector of flash automatically, 1 s after the
+last `SET_SCALE` arrives. The 1 s debounce coalesces bursts (e.g. the
+HAL component sending all four axes on connect) into a single flash
+write. Duplicate writes (same value) are deduplicated and do not trigger
+a save, so steady-state operation does no flash wear.
+
+On boot, `Position::init()` reads the blob and applies it before the
+LinuxCNC HAL has had a chance to (re-)send scale factors. The on-disk
+format carries a CRC32 and a schema version: corruption or schema
+mismatch causes the load to be skipped and the compile-time defaults in
+`main.cpp` to apply.
+
+`RESET_CONFIG` (`0x08`) wipes the sector. After the next reboot, the
+device behaves as if it had never been configured.
+
+Flash wear: ~10,000 erase cycles per sector. With dedup + debounce, a
+typical LinuxCNC user changing their CNC config once a day would take
+~27 years to exhaust it.
 
 ## Test Mode
 

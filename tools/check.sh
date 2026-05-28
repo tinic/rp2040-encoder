@@ -13,6 +13,8 @@ cd "$(dirname "$0")/.."
 
 FIRMWARE_SRCS=(
     rp2040-firmware/main.cpp
+    rp2040-firmware/persistent_config.cpp
+    rp2040-firmware/persistent_config.h
     rp2040-firmware/position.cpp
     rp2040-firmware/position.h
     rp2040-firmware/quadrature_encoder.cpp
@@ -26,6 +28,7 @@ FIRMWARE_SRCS=(
 
 FIRMWARE_TUS=(
     rp2040-firmware/main.cpp
+    rp2040-firmware/persistent_config.cpp
     rp2040-firmware/position.cpp
     rp2040-firmware/quadrature_encoder.cpp
     rp2040-firmware/usb_device.cpp

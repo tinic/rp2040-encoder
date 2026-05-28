@@ -12,10 +12,15 @@ class Position {
     static constexpr size_t kPositions = QuadratureEncoder::kNumEncoders;
 
  private:
+    static constexpr uint32_t kAutoSaveDebounceMs = 1000;
+
     bool initialized = false;
     void init();
     std::array<double, kPositions> positions{};
     std::array<double, kPositions> scale_factors{};
+
+    bool config_dirty = false;
+    uint32_t config_dirty_since_ms = 0;
 
     bool test_mode = false;
     uint32_t test_mode_start_time = 0;
@@ -37,11 +42,7 @@ class Position {
 
     [[nodiscard]] bool get(uint8_t* out, size_t& bytes);
 
-    void set_scale(size_t pos, double scale) {
-        if (pos < kPositions) {
-            scale_factors[pos] = scale;
-        }
-    }
+    void set_scale(size_t pos, double scale);
 
     [[nodiscard]] double get_scale(size_t pos) const {
         if (pos < kPositions) {
@@ -57,6 +58,14 @@ class Position {
     [[nodiscard]] bool is_test_mode() const {
         return test_mode;
     }
+
+    // Called from the main loop. If scale_factors[] has changed and the
+    // debounce window has elapsed, persists the new values to flash.
+    void tick();
+
+    // Wipes the flash-backed config sector. Next boot falls back to the
+    // compile-time defaults set in main.cpp.
+    void reset_persistent_config();
 };
 
 #endif

@@ -133,6 +133,12 @@ void USBDevice::task() const {
                 // disconnect.
                 reset_usb_boot(0, 0);
                 break;
+            case VENDOR_REQUEST_RESET_CONFIG:
+                // Wipe the flash-backed scale-factor blob. Next boot will
+                // fall back to the compile-time defaults set in main.cpp.
+                // In-RAM scale_factors are not modified by this call.
+                Position::instance().reset_persistent_config();
+                break;
             default:
                 break;
         }

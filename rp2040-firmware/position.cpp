@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "persistent_config.h"
 #include "pico/time.h"
 #include "quadrature_encoder.h"
 #include "usb_device.h"
@@ -18,6 +19,40 @@ Position& Position::instance() {
 
 void Position::init() {
     QuadratureEncoder::instance();
+    // Best effort: if the flash sector holds a valid blob, those values
+    // override the compile-time defaults set in main.cpp. If not (first
+    // boot, corruption, schema mismatch), scale_factors keeps whatever
+    // main.cpp will write next via set_scale().
+    (void)PersistentConfig::load(scale_factors);
+}
+
+void Position::set_scale(size_t pos, double scale) {
+    if (pos >= kPositions) {
+        return;
+    }
+    if (scale_factors[pos] == scale) {
+        return;  // dedup: no-op writes do not arm the auto-save
+    }
+    scale_factors[pos] = scale;
+    config_dirty = true;
+    config_dirty_since_ms = to_ms_since_boot(get_absolute_time());
+}
+
+void Position::tick() {
+    if (!config_dirty) {
+        return;
+    }
+    const uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (now - config_dirty_since_ms < kAutoSaveDebounceMs) {
+        return;
+    }
+    PersistentConfig::save(scale_factors);
+    config_dirty = false;
+}
+
+void Position::reset_persistent_config() {
+    PersistentConfig::erase();
+    config_dirty = false;
 }
 
 bool Position::get(uint8_t* out, size_t& bytes) {

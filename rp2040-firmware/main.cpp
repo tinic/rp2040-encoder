@@ -24,6 +24,7 @@ int main() {
 
     while (true) {
         USBDevice::instance().task();
+        pos.tick();
         watchdog_update();
     }
 }

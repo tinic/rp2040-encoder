@@ -22,6 +22,7 @@ class USBDevice {
     static constexpr uint8_t VENDOR_REQUEST_RESET_POSITION = 0x05;
     static constexpr uint8_t VENDOR_REQUEST_GET_VERSION = 0x06;
     static constexpr uint8_t VENDOR_REQUEST_BOOTSEL = 0x07;
+    static constexpr uint8_t VENDOR_REQUEST_RESET_CONFIG = 0x08;
 
     static constexpr uint32_t POSITION_DATA_SENTINEL = 0x3F8A7C91;
     static constexpr uint32_t SCALE_DATA_SENTINEL = 0x7B2D4E8F;

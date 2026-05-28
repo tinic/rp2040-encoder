@@ -38,6 +38,7 @@ pico_sdk_init()
 add_executable(${CMAKE_PROJECT_NAME}
     main.cpp
     position.cpp
+    persistent_config.cpp
     usb_device.cpp
     quadrature_encoder.cpp
     ws2812_led.cpp
@@ -65,6 +66,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     hardware_dma
     hardware_pio
     hardware_clocks
+    hardware_flash
     hardware_watchdog
     pico_bootrom
     tinyusb_device
