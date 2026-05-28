@@ -18,8 +18,8 @@ class QuadratureEncoder {
 
     void init();
 
-    void get_count(size_t encoder_idx, int32_t& count);
-    void get_all_counts(std::array<int32_t, kNumEncoders>& counts);
+    void get_count(size_t encoder_idx, int32_t& count) const;
+    void get_all_counts(std::array<int32_t, kNumEncoders>& counts) const;
 
     void reset_count(size_t encoder_idx);
     void set_count(size_t encoder_idx, int32_t new_count);
@@ -32,12 +32,15 @@ class QuadratureEncoder {
     PIO pio = pio0;
     std::array<uint, kNumEncoders> sm_nums = {};
 
-    std::array<int32_t, kNumEncoders> positions = {};
+    volatile int32_t positions[kNumEncoders] = {};
     std::array<int32_t, kNumEncoders> count_offsets = {};
 
-    int32_t drain_latest(size_t encoder_idx);
+    std::array<int, kNumEncoders> dma_data_chans = {};
+    std::array<int, kNumEncoders> dma_ctrl_chans = {};
+    std::array<volatile int32_t*, kNumEncoders> dma_dst_ptrs = {};
 
     void setup_pio();
+    void setup_dma();
 };
 
 #endif
