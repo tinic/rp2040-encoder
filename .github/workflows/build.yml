@@ -5,17 +5,52 @@ on:
     branches: [main]
     paths:
       - 'rp2040-firmware/**'
+      - 'linuxcnc-hal/**'
+      - 'tools/**'
+      - '.clang-format'
+      - '.clang-tidy'
       - '.github/workflows/build.yml'
   pull_request:
     branches: [main]
     paths:
       - 'rp2040-firmware/**'
+      - 'linuxcnc-hal/**'
+      - 'tools/**'
+      - '.clang-format'
+      - '.clang-tidy'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib \
+            cmake \
+            build-essential \
+            python3 \
+            clang-format \
+            clang-tidy \
+            cppcheck
+
+      - name: Run lint gates (clang-format, cppcheck, build, clang-tidy)
+        run: tools/check.sh
+
   build:
     runs-on: ubuntu-latest
+    needs: lint
     steps:
       - name: Checkout
         uses: actions/checkout@v4

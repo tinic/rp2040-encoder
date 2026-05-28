@@ -1,5 +1,7 @@
 #include "quadrature_encoder.h"
 
+#include <algorithm>
+
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
@@ -17,9 +19,7 @@ QuadratureEncoder& QuadratureEncoder::instance() {
 
 void QuadratureEncoder::init() {
     count_offsets.fill(0);
-    for (size_t i = 0; i < kNumEncoders; i++) {
-        positions[i] = 0;
-    }
+    std::fill_n(std::begin(positions), kNumEncoders, 0);
 
     setup_pio();
 
@@ -31,13 +31,13 @@ void QuadratureEncoder::init() {
 }
 
 void QuadratureEncoder::setup_pio() {
-    uint offset = pio_add_program(pio, &quadrature_encoder_program);
+    const auto offset = pio_add_program(pio, &quadrature_encoder_program);
 
     for (size_t i = 0; i < kNumEncoders; i++) {
-        uint sm = pio_claim_unused_sm(pio, true);
+        const auto sm = pio_claim_unused_sm(pio, true);
         sm_nums[i] = sm;
 
-        uint pin_base = kBasePin + (i * kPinsPerEncoder);
+        const auto pin_base = kBasePin + (i * kPinsPerEncoder);
         quadrature_encoder_program_init(pio, sm, offset, pin_base, 0);
     }
 }
@@ -59,13 +59,12 @@ void QuadratureEncoder::setup_dma() {
         channel_config_set_dreq(&data_cfg, pio_get_dreq(pio, sm_nums[i], false));
         channel_config_set_chain_to(&data_cfg, dma_ctrl_chans[i]);
 
-        dma_channel_configure(
-            dma_data_chans[i], &data_cfg,
-            (void*)&positions[i],
-            &pio->rxf[sm_nums[i]],
-            1,
-            true
-        );
+        // Hand the DMA controller a non-volatile pointer to a volatile slot. The
+        // volatile is for the CPU's view (DMA writes asynchronously); the DMA
+        // engine sees memory directly and is unaffected by the C++ qualifier.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+        dma_channel_configure(dma_data_chans[i], &data_cfg, const_cast<int32_t*>(&positions[i]), &pio->rxf[sm_nums[i]],
+                              1, true);
 
         // Control channel: one transfer that writes &positions[i] into the data
         // channel's AL2_WRITE_ADDR_TRIG, which restores write_addr (no-op since
@@ -75,13 +74,8 @@ void QuadratureEncoder::setup_dma() {
         channel_config_set_read_increment(&ctrl_cfg, false);
         channel_config_set_write_increment(&ctrl_cfg, false);
 
-        dma_channel_configure(
-            dma_ctrl_chans[i], &ctrl_cfg,
-            &dma_hw->ch[dma_data_chans[i]].al2_write_addr_trig,
-            &dma_dst_ptrs[i],
-            1,
-            false
-        );
+        dma_channel_configure(dma_ctrl_chans[i], &ctrl_cfg, &dma_hw->ch[dma_data_chans[i]].al2_write_addr_trig,
+                              static_cast<const void*>(&dma_dst_ptrs[i]), 1, false);
     }
 }
 
@@ -92,16 +86,22 @@ void QuadratureEncoder::get_all_counts(std::array<int32_t, kNumEncoders>& counts
 }
 
 void QuadratureEncoder::get_count(size_t encoder_idx, int32_t& count) const {
-    if (encoder_idx >= kNumEncoders) return;
+    if (encoder_idx >= kNumEncoders) {
+        return;
+    }
     count = positions[encoder_idx] - count_offsets[encoder_idx];
 }
 
 void QuadratureEncoder::reset_count(size_t encoder_idx) {
-    if (encoder_idx >= kNumEncoders) return;
+    if (encoder_idx >= kNumEncoders) {
+        return;
+    }
     count_offsets[encoder_idx] = positions[encoder_idx];
 }
 
 void QuadratureEncoder::set_count(size_t encoder_idx, int32_t new_count) {
-    if (encoder_idx >= kNumEncoders) return;
+    if (encoder_idx >= kNumEncoders) {
+        return;
+    }
     count_offsets[encoder_idx] = positions[encoder_idx] - new_count;
 }

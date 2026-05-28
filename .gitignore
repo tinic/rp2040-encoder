@@ -30,3 +30,8 @@
 *.exe
 *.out
 *.app
+
+# Build directories
+rp2040-firmware/build/
+rp2040-firmware/build-lint/
+

@@ -1,7 +1,8 @@
 #include "ws2812_led.h"
-#include "ws2812.pio.h"
-#include "hardware/pio.h"
+
 #include "hardware/clocks.h"
+#include "hardware/pio.h"
+#include "ws2812.pio.h"
 
 WS2812Led& WS2812Led::instance() {
     static WS2812Led led;
@@ -13,12 +14,12 @@ WS2812Led& WS2812Led::instance() {
 }
 
 void WS2812Led::init() {
-    uint offset = pio_add_program(pio, &ws2812_program);
+    const auto offset = pio_add_program(pio, &ws2812_program);
     ws2812_program_init(pio, sm, offset, PICO_DEFAULT_WS2812_PIN, 800000, false);
 }
 
 void WS2812Led::set_color(uint8_t red, uint8_t green, uint8_t blue) {
-    uint32_t pixel_grb = ((uint32_t)green << 16) | ((uint32_t)red << 8) | blue;
+    const uint32_t pixel_grb = (static_cast<uint32_t>(green) << 16) | (static_cast<uint32_t>(red) << 8) | blue;
     put_pixel(pixel_grb);
 }
 

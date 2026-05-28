@@ -1,0 +1,61 @@
+# clang-tidy config for rp2040-encoder. Mirrors ../tvm802-vision/.clang-tidy.
+#
+# Enforced in CI (.github/workflows/build.yml lint job) and locally by
+# tools/check.sh. Runs against the compile_commands.json that cmake emits from
+# the Pico SDK build, so clang-tidy sees the ARM cross-compile invocation
+# directly and can use the Pico SDK + TinyUSB headers.
+#
+# Check set = "everything" minus two groups of exclusions:
+#   1. Project-irrelevant or style-only checks (magic numbers, identifier
+#      length, trailing return types, etc. that don't fit dense embedded code).
+#   2. Checks inapplicable to a USB-device firmware drop-in:
+#      include-cleaner fights the Pico SDK + TinyUSB umbrella headers;
+#      reinterpret_cast / int-to-ptr are mandatory for DMA hw->ch[] register
+#      pokes; non-const globals mirror PIO state shared with hardware DMA;
+#      use-anonymous-namespace -- file-`static` internal-linkage helpers (USB
+#      descriptor callbacks etc.) are interleaved with the tinyusb extern "C"
+#      bridge, so a per-function anonymous namespace would add noise;
+#      *-avoid-c-arrays -- `volatile int32_t positions[N]` is required for DMA
+#      writes to be visible to the CPU; std::array does not propagate volatile
+#      element semantics cleanly;
+#      cppcoreguidelines-macro-usage -- TinyUSB's tusb_config.h is its
+#      configuration API and is required to be `#define`-based;
+#      readability-convert-member-functions-to-static -- false positive on
+#      inline member functions in this clang-tidy build.
+# Braces ARE required (readability-braces-around-statements stays on): brace-less
+# bodies are merge-error-prone. .clang-format expands them to full blocks.
+Checks: >
+  *,
+  -altera-*,
+  -fuchsia-*,
+  -llvm*,
+  -hicpp-uppercase-literal-suffix,
+  -hicpp-signed-bitwise,
+  -misc-non-private-member-variables-in-classes,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-uppercase-literal-suffix,
+  -readability-identifier-length,
+  -readability-simplify-boolean-expr,
+  -readability-math-missing-parentheses,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -modernize-use-trailing-return-type,
+  -modernize-use-std-numbers,
+  -performance-enum-size,
+  -bugprone-easily-swappable-parameters,
+  -misc-include-cleaner,
+  -misc-use-anonymous-namespace,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -performance-no-int-to-ptr,
+  -android-cloexec-socket,
+  -cppcoreguidelines-avoid-c-arrays,
+  -hicpp-avoid-c-arrays,
+  -modernize-avoid-c-arrays,
+  -cppcoreguidelines-macro-usage,
+  -readability-convert-member-functions-to-static
+WarningsAsErrors: '*'
+HeaderFilterRegex: 'rp2040-firmware/[^/]+\.h$'
+FormatStyle: file

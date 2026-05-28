@@ -20,16 +20,16 @@ class USBDevice {
     static constexpr uint8_t VENDOR_REQUEST_SET_SCALE = 0x03;
     static constexpr uint8_t VENDOR_REQUEST_GET_SCALE = 0x04;
     static constexpr uint8_t VENDOR_REQUEST_RESET_POSITION = 0x05;
-    
+
     static constexpr uint32_t POSITION_DATA_SENTINEL = 0x3F8A7C91;
     static constexpr uint32_t SCALE_DATA_SENTINEL = 0x7B2D4E8F;
-    
+
     static USBDevice& instance();
 
     void init();
-    void task();
-    [[nodiscard]] bool send_position_data();
-    [[nodiscard]] bool send_scale_data();
+    void task() const;
+    [[nodiscard]] bool send_position_data() const;
+    [[nodiscard]] bool send_scale_data() const;
 
  private:
     USBDevice() = default;

@@ -1,14 +1,6 @@
-#include <stdio.h>
-
-#include "hardware/clocks.h"
-#include "hardware/gpio.h"
-#include "hardware/pll.h"
-#include "hardware/sync.h"
 #include "hardware/watchdog.h"
-#include "hardware/xosc.h"
 #include "pico/stdlib.h"
 #include "position.h"
-#include "quadrature_encoder.h"
 #include "usb_device.h"
 #include "ws2812_led.h"
 
@@ -23,14 +15,14 @@ int main() {
     pos.set_scale(1, 0.001);
     pos.set_scale(2, 0.001);
     pos.set_scale(3, 0.1);
-    
+
     pos.enable_test_mode(false);
 
     WS2812Led::instance().set_green();
 
     watchdog_enable(1000, true);
 
-    while (1) {
+    while (true) {
         USBDevice::instance().task();
         watchdog_update();
     }
