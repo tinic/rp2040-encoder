@@ -127,6 +127,25 @@ void user_mainloop(void) {
                         printf("rp2040_encoder: Device connected and ready\n");
                         fflush(stdout);
 
+                        // Drain any response left queued in the device IN
+                        // endpoint by a previous session. Without this, a stale
+                        // frame sits at the head of the stream and every
+                        // request/response pair reads one response behind for
+                        // the whole session (sentinels prevent misreads but not
+                        // the latency). Short timeout; loop until the pipe is
+                        // empty or we hit a sane cap.
+                        {
+                            uint8_t drain_buf[64];
+                            int drain_len = 0;
+                            for (int drained = 0; drained < 8; drained++) {
+                                int dr = libusb_bulk_transfer(dev_handle, EP_IN, drain_buf,
+                                                              sizeof(drain_buf), &drain_len, 20);
+                                if (dr != 0 || drain_len == 0) {
+                                    break;
+                                }
+                            }
+                        }
+
                         // Read the firmware version once so the LinuxCNC log
                         // records exactly which build is in the device.
                         uint8_t version_buf[64];
@@ -225,8 +244,14 @@ void user_mainloop(void) {
                             buffer[0] = VENDOR_REQUEST_RESET_POSITION;
                             buffer[1] = i;  // Encoder index
                             r = libusb_bulk_transfer(dev_handle, EP_OUT, buffer, 2, &actual_length, 100);
+                            // Only latch the new value once the device has
+                            // acknowledged it. A transient USB error must NOT
+                            // swallow an axis-zero request — leaving last_reset
+                            // unchanged makes the next loop iteration retry it.
+                            if (r == 0) {
+                                last_reset[i] = reset(i);
+                            }
                         }
-                        last_reset[i] = reset(i);
                     }
                     
                     

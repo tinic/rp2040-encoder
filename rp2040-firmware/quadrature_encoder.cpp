@@ -81,7 +81,11 @@ void QuadratureEncoder::setup_dma() {
 
 void QuadratureEncoder::get_all_counts(std::array<int32_t, kNumEncoders>& counts) const {
     for (size_t i = 0; i < kNumEncoders; i++) {
-        counts[i] = positions[i] - count_offsets[i];
+        // Subtract in unsigned space: two's-complement wrap is the intended
+        // behavior when the free-running PIO counter rolls past INT32_MAX, but
+        // signed overflow is UB in C++. The unsigned result has identical bits.
+        const auto delta = static_cast<uint32_t>(positions[i]) - static_cast<uint32_t>(count_offsets[i]);
+        counts[i] = static_cast<int32_t>(delta);
     }
 }
 
