@@ -29,7 +29,6 @@ SYMBOL = {  # kind -> (library, symbol)
     "c": ("Device", "C"),
     "cbulk": ("Device", "C"),
     "led": ("Device", "LED"),
-    "d": ("Device", "D_Schottky"),
     "hole": ("Mechanical", "MountingHole"),
     "zero": ("rp2040_encoder", "RP2040-Zero"),
     "flag": ("power", "PWR_FLAG"),
@@ -284,12 +283,12 @@ def main(out_path):
 
     # ---- machine-side supply
     sheet.note("Machine-side supply", 320.04, 106.68, 2.5)
-    sheet.note("+5 V of each scale connector, diode-ORed", 320.04, 111.76, 1.6)
+    sheet.note("+5 V of each scale connector, joined through 0R links", 320.04, 111.76, 1.6)
     for i in range(4):
-        put("D%d" % (i + 1), 345.44, 124.46 + i * 10.16, ref_at=(0, -2.54), value_at=(0, 2.54))
+        put("R%d" % (15 + i), 345.44, 124.46 + i * 10.16, rot=90, ref_at=(0, -2.54), value_at=(0, 2.54))
     put("R13", 345.44, 167.64, rot=90, ref_at=(0, -2.54), value_at=(0, 2.54))
     put("R14", 345.44, 180.34, rot=90, ref_at=(0, -2.54), value_at=(0, 2.54))
-    put("D5", 345.44, 193.04, ref_at=(0, -2.54), value_at=(0, 2.54))
+    put("D1", 345.44, 193.04, ref_at=(0, -2.54), value_at=(0, 2.54))
 
     # ---- power flags for the electrical rules check, and the mounting holes
     for k, net in enumerate(("VCC1", "GND1", "GND2")):

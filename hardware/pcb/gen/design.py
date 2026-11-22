@@ -46,7 +46,6 @@ FP = {
     "c": ("Capacitor_SMD", "C_0603_1608Metric"),
     "cbulk": ("Capacitor_SMD", "C_0805_2012Metric"),
     "led": ("LED_SMD", "LED_0603_1608Metric"),
-    "d": ("Diode_SMD", "D_SOD-123"),
     "hole": ("MountingHole", "MountingHole_3.2mm_M3"),
     "zero": ("rp2040_encoder", "RP2040-Zero"),
 }
@@ -132,22 +131,25 @@ def build():
     nets[("C18", "1")] = "+3V3"
     nets[("C18", "2")] = "GND2"
 
-    # --- machine-side supply: the +5 V of each scale connector, diode-ORed
+    # --- machine-side supply: the +5 V of each scale connector, joined through 0R links.
+    # All four come from the one DRO supply. Links, not diodes: the isolators must run from the
+    # rail that drives their inputs (ISO7760: an input may not exceed VCC1). Leave a link out to
+    # keep one connector's +5 V apart.
     px = 97.3
     for i, axis in enumerate(AXES):
-        ref = "D%d" % (i + 1)
-        add(ref, "d", "MBR0520", px - 1.7 + 3.4 * (i % 2), 10.6 + 5.0 * (i // 2), 90.0)
-        nets[(ref, "2")] = db9_net(axis, DB9_5V)   # anode
-        nets[(ref, "1")] = "VCC1_RAW"              # cathode
+        ref = "R%d" % (15 + i)
+        add(ref, "r", "0R", px - 1.7 + 3.4 * (i % 2), 10.6 + 4.0 * (i // 2), 90.0)
+        nets[(ref, "1")] = db9_net(axis, DB9_5V)
+        nets[(ref, "2")] = "VCC1_RAW"
     add("R13", "r", "10R", px, 19.4)
     nets[("R13", "1")] = "VCC1_RAW"
     nets[("R13", "2")] = "VCC1"
     add("R14", "r", "2k2", px, 21.2)
     nets[("R14", "1")] = "VCC1"
     nets[("R14", "2")] = "LED_A"
-    add("D5", "led", "5V", px, 23.0)
-    nets[("D5", "2")] = "LED_A"                    # anode
-    nets[("D5", "1")] = "GND1"                     # cathode
+    add("D1", "led", "5V", px, 23.0)
+    nets[("D1", "2")] = "LED_A"                    # anode
+    nets[("D1", "1")] = "GND1"                     # cathode
 
     # --- the controller
     add("U3", "zero", "RP2040-Zero", ZERO_X, ZERO_Y, -90.0)
