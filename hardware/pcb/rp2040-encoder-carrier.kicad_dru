@@ -1,0 +1,9 @@
+(version 1)
+
+# Galvanic isolation: the nets on the USB side of the ISO7760F isolators (net class "Logic")
+# stay this far from every net on the machine side. The isolator's own pad rows are 3.8 mm
+# apart, which is what limits the distance on this board. Unconnected pins (the unused pins
+# of the RP2040-Zero) are left out.
+(rule "isolation barrier"
+  (condition "A.NetClass == 'Logic' && B.NetClass != 'Logic' && B.NetName != 'unconnected-*'")
+  (constraint clearance (min 3.5mm)))
