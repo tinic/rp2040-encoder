@@ -20,6 +20,10 @@ with adhesive tape. Outside 131 x 50 x 19.1 mm.
   the sockets. One slot takes the four DRO ribbon plugs. USB leaves through the end wall.
 - A 3 mm hole in the lid sits over the 5 V LED.
 - Inside height above the board is 9.5 mm, enough for an RP2040-Zero on pin headers.
+- Base and lid meet in a lip-and-groove joint. The base carries a lip 0.9 mm wide and 1.5 mm
+  high on the inner half of its wall; the lid has a matching step 1.05 mm wide and 1.7 mm deep,
+  so there is 0.15 mm of play sideways and the outer faces meet before the lip bottoms out. The
+  lip is interrupted at the USB cut-out.
 
 ## Printing and assembly
 
