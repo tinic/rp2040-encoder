@@ -29,7 +29,9 @@ void QuadratureEncoder::init() {
     std::fill_n(std::begin(positions), kNumEncoders, 0);
     std::fill_n(std::begin(ref_pulse_counts), kNumEncoders, 0U);
     std::fill_n(std::begin(ref_positions), kNumEncoders, 0);
+    std::fill_n(std::begin(ref_edge_counts), kNumEncoders, 0);
     index_armed_mask = 0U;
+    ref_holdoff_mask = 0U;
 
     setup_pio();
 
@@ -104,6 +106,8 @@ void QuadratureEncoder::setup_ref_pins() {
 }
 
 void QuadratureEncoder::configure_ref_pins_locked() {
+    // A new configuration starts every input afresh.
+    ref_holdoff_mask = 0U;
     for (size_t i = 0; i < kNumEncoders; i++) {
         const uint pin = kRefBasePin + static_cast<uint>(i);
         const auto bit = static_cast<uint8_t>(1U << i);
@@ -158,9 +162,47 @@ void QuadratureEncoder::handle_ref_irq(uint gpio, uint32_t events) {
     ref_positions[idx] = static_cast<int32_t>(rel);
     ref_pulse_counts[idx] = ref_pulse_counts[idx] + 1U;
 
+    // This edge is the pulse. Whatever else the flank delivers is not counted, and does not
+    // interrupt either: the input stays off until service_ref_inputs() sees the axis gone.
+    ref_edge_counts[idx] = raw;
+    ref_holdoff_mask = static_cast<uint8_t>(ref_holdoff_mask | bit);
+    gpio_set_irq_enabled(gpio, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false);
+
     if ((index_armed_mask & bit) != 0U) {
         count_offsets[idx] = raw;
         index_armed_mask = static_cast<uint8_t>(index_armed_mask & static_cast<uint8_t>(~bit));
+    }
+}
+
+void QuadratureEncoder::rearm_ref_pin_locked(size_t encoder_idx) {
+    const uint pin = kRefBasePin + static_cast<uint>(encoder_idx);
+    const auto bit = static_cast<uint8_t>(1U << encoder_idx);
+    ref_holdoff_mask = static_cast<uint8_t>(ref_holdoff_mask & static_cast<uint8_t>(~bit));
+    // Edges that arrived while the input was off are not a pulse.
+    gpio_acknowledge_irq(pin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL);
+    if ((ref_enable_mask & bit) != 0U) {
+        const uint32_t edge = ((ref_invert_mask & bit) != 0U) ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
+        gpio_set_irq_enabled(pin, edge, true);
+    }
+}
+
+void QuadratureEncoder::service_ref_inputs() {
+    if (ref_holdoff_mask == 0U) {
+        return;
+    }
+    for (size_t i = 0; i < kNumEncoders; i++) {
+        const auto bit = static_cast<uint8_t>(1U << i);
+        if ((ref_holdoff_mask & bit) == 0U) {
+            continue;
+        }
+        // Unsigned difference, as in get_all_counts: the counter may wrap.
+        const auto moved =
+            static_cast<int32_t>(static_cast<uint32_t>(positions[i]) - static_cast<uint32_t>(ref_edge_counts[i]));
+        if (moved >= kRefRearmCounts || moved <= -kRefRearmCounts) {
+            const uint32_t irq = save_and_disable_interrupts();
+            rearm_ref_pin_locked(i);
+            restore_interrupts(irq);
+        }
     }
 }
 
@@ -182,6 +224,11 @@ void QuadratureEncoder::arm_index(size_t encoder_idx, bool arm) {
     const uint32_t irq = save_and_disable_interrupts();
     if (arm && ((ref_enable_mask & bit) != 0U)) {
         index_armed_mask = static_cast<uint8_t>(index_armed_mask | bit);
+        // The host waits for the next pulse from here on: it must not be held off by an
+        // earlier one, however close the axis still is to that mark.
+        if ((ref_holdoff_mask & bit) != 0U) {
+            rearm_ref_pin_locked(encoder_idx);
+        }
     } else {
         index_armed_mask = static_cast<uint8_t>(index_armed_mask & static_cast<uint8_t>(~bit));
     }

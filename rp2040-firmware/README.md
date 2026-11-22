@@ -14,7 +14,9 @@ overview.
   positions[] directly via const member functions.
 - A GPIO interrupt per axis on GP26–GP29 latches the count at the scale's
   reference (R / index) pulse and counts the pulses; unwired inputs are
-  held inactive by an internal pull.
+  held inactive by an internal pull. After an edge the input is ignored
+  until the axis has moved 32 counts away, so that the slow flank of a
+  pulse counts once.
 - USB vendor-class device (VID `0x2E8A`, PID `0xC0DE`) speaks the
   request/response protocol below; framing is one command per transfer,
   responses are 56 bytes (one short packet on the 64-byte endpoint), every

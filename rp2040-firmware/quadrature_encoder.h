@@ -15,6 +15,13 @@ class QuadratureEncoder {
     static constexpr uint kPinsPerEncoder = 2;
     static constexpr uint kRefBasePin = 26;  // GP26=X, GP27=Y, GP28=Z, GP29=A
 
+    // After a reference edge the input of that encoder is ignored until its count is this far
+    // from the count at the edge. A reference pulse has slow flanks: an axis that moves slowly
+    // over the mark, or stops on its flank, would otherwise deliver hundreds of edges (about 250
+    // in one pass were seen on a 5 um glass scale, within a few counts). 32 counts is well
+    // outside that zone and far below the distance between two marks or two index pulses.
+    static constexpr int32_t kRefRearmCounts = 32;
+
     static constexpr uint8_t kAllAxesMask = (1U << kNumEncoders) - 1U;
     static constexpr uint8_t kDefaultRefEnableMask = kAllAxesMask;
     static constexpr uint8_t kDefaultRefInvertMask = 0x00U;
@@ -48,6 +55,10 @@ class QuadratureEncoder {
 
     void arm_index(size_t encoder_idx, bool arm);
 
+    // Main loop, every pass: lets a reference input count again once its axis has left the
+    // mark (see kRefRearmCounts). Cheap while no input is held off.
+    void service_ref_inputs();
+
  private:
     QuadratureEncoder() = default;
 
@@ -64,6 +75,10 @@ class QuadratureEncoder {
     volatile uint8_t index_armed_mask = 0;
     volatile uint32_t ref_pulse_counts[kNumEncoders] = {};
     volatile int32_t ref_positions[kNumEncoders] = {};
+    // Bit N: the edge of encoder N has been counted and its interrupt is off until the axis
+    // has moved kRefRearmCounts away from ref_edge_counts[N], the raw count at that edge.
+    volatile uint8_t ref_holdoff_mask = 0;
+    volatile int32_t ref_edge_counts[kNumEncoders] = {};
 
     std::array<int, kNumEncoders> dma_data_chans = {};
     std::array<int, kNumEncoders> dma_ctrl_chans = {};
@@ -73,6 +88,7 @@ class QuadratureEncoder {
     void setup_dma();
     void setup_ref_pins();
     void configure_ref_pins_locked();
+    void rearm_ref_pin_locked(size_t encoder_idx);
     void handle_ref_irq(uint gpio, uint32_t events);
     static void gpio_irq_callback(uint gpio, uint32_t events);
 };

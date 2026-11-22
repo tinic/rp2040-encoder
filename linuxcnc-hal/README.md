@@ -78,7 +78,7 @@ to GP29; see [`../hardware/README.md`](../hardware/README.md) for the wiring.
 |-----|------|---------|---------|
 | `ref-enable-N` | bit in | 1 | Recognise reference pulses on this scale. Kept in the device's flash |
 | `ref-invert-N` | bit in | 0 | 0: the pulse is active high and counted on its rising edge. 1: active low, counted on its falling edge. Kept in the device's flash |
-| `ref-count-N` | u32 out | | Reference pulse edges seen since the device was powered or reset; one crossing of a mark can count more than one (see below). It starts at 0 again after a reboot of the device, not after a restart of LinuxCNC |
+| `ref-count-N` | u32 out | | Reference pulses seen since the device was powered or reset: one per crossing of a mark with firmware after v3.0.0, possibly many with v3.0.0 (see below). It starts at 0 again after a reboot of the device, not after a restart of LinuxCNC |
 | `ref-position-N` | float out | | Position of the scale at the latest reference pulse, latched in the device at the edge, in the units and sign of `position-N`. It follows `ref-count-N` by one USB round trip |
 | `ref-state-N` | bit out | | The reference input is active now. A pulse can be shorter than the time between two readings: use `ref-count-N` to see that one happened |
 | `index-enable-N` | bit io | 0 | LinuxCNC's index handshake: set it and the device zeroes the count of that scale at the next reference pulse, then the component clears the pin |
@@ -88,10 +88,14 @@ Things to know when using them:
 - A pulse is counted on an edge. An axis that stands on its reference mark when the
   device starts has `ref-state-N` true and `ref-count-N` 0 until it leaves the mark and
   crosses it again.
-- One crossing of a mark is not always one count. The input is not debounced: on one
-  scale a slow pass over the mark counted about 250 edges within 0.1 mm, where passes by
-  hand had counted one each. Treat a change of `ref-count-N` as "the mark was crossed",
-  not as a number of crossings; `ref-position-N` then holds the last of those edges.
+- Firmware after v3.0.0 counts one edge per crossing: after an edge the input is ignored
+  until the axis has moved 32 counts away from it (0.16 mm at 0.005 mm per count), and
+  `ref-position-N` holds that first edge. Two crossings closer together than that count
+  once. Arming `index-enable-N` lets the input count again at once.
+- Firmware v3.0.0 does not debounce the input: on one scale a slow pass over the mark
+  counted about 250 edges within a few counts, where passes by hand had counted one each,
+  and `ref-position-N` held the last of them. With that firmware treat a change of
+  `ref-count-N` as "the mark was crossed", not as a number of crossings.
 - `ref-position-N` is in the count the scale had when the pulse arrived. Zeroing the
   count afterwards, with `reset-N` or through `index-enable-N`, does not move the latched
   value with it: after that, wait for the next pulse before using `ref-position-N`.
