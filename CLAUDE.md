@@ -96,7 +96,11 @@ sudo halcompile --install rp2040_encoder.comp
 
 The device implements a vendor-specific USB interface with the following commands:
 
-- **0x01** - Get Position: Returns 32 bytes (4 doubles) with current position values
+Every response is 56 bytes: a 4-byte sentinel, then the payload, zero-padded. Responses stay
+below the endpoint's 64-byte packet on purpose (a full packet would be followed by a
+zero-length packet). `rp2040-firmware/README.md` has the byte layouts.
+
+- **0x01** - Get Position: 4 doubles with current position values, then the reference enable, invert, live and index-armed masks (1 byte each) and 4 uint32 reference pulse counts
 - **0x02** - Set Test Mode: Sets test mode (requires 1 byte parameter)
   - 0 = Disable test mode (use real encoder data)
   - 1 = Sine wave pattern
@@ -104,13 +108,24 @@ The device implements a vendor-specific USB interface with the following command
   - 3 = Linear ramp pattern
   - 4 = Random walk pattern
 - **0x03** - Set Scale: Sets scale factor for an encoder (requires 1 byte encoder index + 8 bytes double scale factor)
-- **0x04** - Get Scale: Returns 32 bytes (4 doubles) with scale factors for all encoders
+- **0x04** - Get Scale: 4 doubles with scale factors for all encoders
 - **0x05** - Reset Encoder: Resets encoder position to zero (requires 1 byte encoder index)
+- **0x06** - Get Version: zero-padded `git describe` text
+- **0x07** - Bootsel: reboots into the UF2 bootloader (the device drops off the bus)
+- **0x08** - Reset Config: erases the persisted scales and reference masks; takes effect on the next boot
 - **0x09** - Set Reference Config: Sets per-axis R-pulse enable and invert bitmasks (`[0x09, enable_mask, invert_mask]`, persisted in flash; default `enable_mask=0x0F`, `invert_mask=0x00`)
 - **0x0A** - Get Reference Position: Returns 56 bytes like every response (`[sentinel 0x9C4E2A71: 4][4 doubles ref_positions: 32][4 uint32 ref_counts: 16]`)
 - **0x0B** - Arm Index: Arms or disarms LinuxCNC `index-enable` zero-on-next-R for an axis (`[0x0B, encoder_index, arm]`)
 
 Position data format: 4 double-precision floating point values (little-endian)
+
+## HAL pins
+
+The component is `rp2040_encoder`; its pins are `rp2040-encoder.0.*` (halcompile turns the
+underscore into a dash). Per encoder N: `position-N`, `scale-N`, `scale-fb-N`, `sign-N`,
+`reset-N`, and for the reference pulse `ref-enable-N`, `ref-invert-N`, `ref-count-N`,
+`ref-position-N`, `ref-state-N`, `index-enable-N`; plus `connected` and `test-mode`.
+`linuxcnc-hal/README.md` describes each one.
 
 ## Test Mode
 

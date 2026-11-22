@@ -28,6 +28,7 @@ Spliced into the existing DRO via DB9 breakouts — there are likely nicer-looki
 - PIO-based edge counting on the RP2040 — no software polling loop, no missed transitions
 - DMA reload pair per channel drains the PIO RX FIFO into memory with **zero CPU involvement**, so position counts cannot drop regardless of scale velocity
 - 32-bit signed position counters per axis
+- Optional reference (R / index) pulse input per axis: pulse count, the position latched at the pulse, and LinuxCNC's index handshake, as HAL pins
 - USB vendor-class device + LinuxCNC HAL userspace component
 - Configurable per-axis scale factors (compile-time defaults overridable at runtime over USB or via HAL pins)
 - Built-in test mode (sine / circular / linear / random) for development and debugging without scales attached

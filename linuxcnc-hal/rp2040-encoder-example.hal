@@ -13,60 +13,60 @@ newsig encoder-connected bit
 newsig encoder-test-mode s32
 
 # Connect RP2040 encoder outputs to signals
-net x-encoder-pos <= rp2040_encoder.0.position-0
-net y-encoder-pos <= rp2040_encoder.0.position-1
-net z-encoder-pos <= rp2040_encoder.0.position-2
-net a-encoder-pos <= rp2040_encoder.0.position-3
-net encoder-connected <= rp2040_encoder.0.connected
+net x-encoder-pos <= rp2040-encoder.0.position-0
+net y-encoder-pos <= rp2040-encoder.0.position-1
+net z-encoder-pos <= rp2040-encoder.0.position-2
+net a-encoder-pos <= rp2040-encoder.0.position-3
+net encoder-connected <= rp2040-encoder.0.connected
 
 # Test mode control (0=off, 1=sine, 2=circular, 3=linear, 4=random)
 # Example: Set test mode to 0 (disabled) for normal operation
-setp rp2040_encoder.0.test-mode 0
+setp rp2040-encoder.0.test-mode 0
 # Or connect to a signal for dynamic control
-# net encoder-test-mode => rp2040_encoder.0.test-mode
+# net encoder-test-mode => rp2040-encoder.0.test-mode
 
 # Scale factors - convert encoder counts to meaningful units
 # These are bidirectional (io pins) - they read the device's current scale on startup
 # and can be changed during operation
 # Example: 1000 counts per mm = 0.001 mm/count
-setp rp2040_encoder.0.scale-0 0.001  # X axis: 0.001 mm per count
-setp rp2040_encoder.0.scale-1 0.001  # Y axis: 0.001 mm per count
-setp rp2040_encoder.0.scale-2 0.001  # Z axis: 0.001 mm per count
-setp rp2040_encoder.0.scale-3 0.1    # A axis: 0.1 degrees per count
+setp rp2040-encoder.0.scale-0 0.001  # X axis: 0.001 mm per count
+setp rp2040-encoder.0.scale-1 0.001  # Y axis: 0.001 mm per count
+setp rp2040-encoder.0.scale-2 0.001  # Z axis: 0.001 mm per count
+setp rp2040-encoder.0.scale-3 0.1    # A axis: 0.1 degrees per count
 
 # Per-axis sign: default +1. Set to -1 for any axis whose mechanical "forward"
 # direction does not match the encoder count-up direction (depends on how the
 # A/B pair is wired vs. axis orientation). Pre-2026 builds applied a global -1
 # multiplier; if you are upgrading and your axes now move the wrong way, add
 # the four setp lines below.
-# setp rp2040_encoder.0.sign-0 -1
-# setp rp2040_encoder.0.sign-1 -1
-# setp rp2040_encoder.0.sign-2 -1
-# setp rp2040_encoder.0.sign-3 -1
+# setp rp2040-encoder.0.sign-0 -1
+# setp rp2040-encoder.0.sign-1 -1
+# setp rp2040-encoder.0.sign-2 -1
+# setp rp2040-encoder.0.sign-3 -1
 
 # Reset pins - rising edge triggers position reset to zero
 # Connect these to UI buttons or other controls
-# net x-zero-button => rp2040_encoder.0.reset-0
-# net y-zero-button => rp2040_encoder.0.reset-1
-# net z-zero-button => rp2040_encoder.0.reset-2
-# net a-zero-button => rp2040_encoder.0.reset-3
+# net x-zero-button => rp2040-encoder.0.reset-0
+# net y-zero-button => rp2040-encoder.0.reset-1
+# net z-zero-button => rp2040-encoder.0.reset-2
+# net a-zero-button => rp2040-encoder.0.reset-3
 
 # Reference (R / index) pulse inputs on GP26 (X), GP27 (Y), GP28 (Z), GP29 (A)
 # Enabled by default (internal pull-down keeps unwired pins quiet).
 # Set ref-invert-N to 1 for active-LOW (falling edge) reference pulses.
-# setp rp2040_encoder.0.ref-enable-0 1
-# setp rp2040_encoder.0.ref-invert-0 0
+# setp rp2040-encoder.0.ref-enable-0 1
+# setp rp2040-encoder.0.ref-invert-0 0
 #
 # Standard LinuxCNC index-enable handshake (e.g. for HOME_USE_INDEX):
-# net x-index-enable joint.0.index-enable <=> rp2040_encoder.0.index-enable-0
-# net y-index-enable joint.1.index-enable <=> rp2040_encoder.0.index-enable-1
-# net z-index-enable joint.2.index-enable <=> rp2040_encoder.0.index-enable-2
-# net a-index-enable joint.3.index-enable <=> rp2040_encoder.0.index-enable-3
+# net x-index-enable joint.0.index-enable <=> rp2040-encoder.0.index-enable-0
+# net y-index-enable joint.1.index-enable <=> rp2040-encoder.0.index-enable-1
+# net z-index-enable joint.2.index-enable <=> rp2040-encoder.0.index-enable-2
+# net a-index-enable joint.3.index-enable <=> rp2040-encoder.0.index-enable-3
 #
 # Passive monitoring of 50 mm glass-scale reference marks:
-#   rp2040_encoder.0.ref-position-N  (float out: position of last R pulse)
-#   rp2040_encoder.0.ref-count-N     (u32 out: total R pulses detected)
-#   rp2040_encoder.0.ref-state-N     (bit out: live logical level of R input)
+#   rp2040-encoder.0.ref-position-N  (float out: position of last R pulse)
+#   rp2040-encoder.0.ref-count-N     (u32 out: total R pulses detected)
+#   rp2040-encoder.0.ref-state-N     (bit out: live logical level of R input)
 
 # Example: Connect to PyVCP panel for DRO display
 # net x-encoder-pos => pyvcp.x-dro
@@ -82,4 +82,4 @@ setp rp2040_encoder.0.scale-3 0.1    # A axis: 0.1 degrees per count
 
 # Show component status
 show comp rp2040_encoder
-show pin rp2040_encoder
+show pin rp2040-encoder

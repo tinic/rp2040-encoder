@@ -12,6 +12,9 @@ overview.
 - A DMA reload pair per encoder drains the PIO RX FIFO into a `volatile
   int32_t positions[N]` slot with zero CPU involvement; CPU reads
   positions[] directly via const member functions.
+- A GPIO interrupt per axis on GP26–GP29 latches the count at the scale's
+  reference (R / index) pulse and counts the pulses; unwired inputs are
+  held inactive by an internal pull.
 - USB vendor-class device (VID `0x2E8A`, PID `0xC0DE`) speaks the
   request/response protocol below; framing is one command per transfer,
   responses are 56 bytes (one short packet on the 64-byte endpoint), every
@@ -93,6 +96,9 @@ Vendor-class endpoints (VID `0x2E8A`, PID `0xC0DE`):
 | `0x06` | GET_VERSION         | none                                   | 56-byte version   |
 | `0x07` | BOOTSEL             | none; reboots into BOOTSEL (2e8a:0003) | (device drops off bus) |
 | `0x08` | RESET_CONFIG        | none; erases the persisted scales blob; takes effect on next boot | none |
+| `0x09` | SET_REF_CONFIG      | 1 byte enable mask + 1 byte invert mask, bit N for encoder N; auto-persists after 1 s debounce | none |
+| `0x0A` | GET_REF_POSITION    | none                                   | 56-byte reference positions |
+| `0x0B` | ARM_INDEX           | 1 byte idx + 1 byte (1 arm, 0 disarm): zero that count at its next reference pulse | none |
 
 ### Responses (device → host)
 
@@ -103,6 +109,30 @@ Every response is exactly 56 bytes. `GET_POSITION` and `GET_SCALE`:
 | 0      | 4    | Sentinel: `0x3F8A7C91` for position, `0x7B2D4E8F` for scale (little-endian) |
 | 4      | 32   | 4 little-endian doubles                                                 |
 | 36     | 20   | `GET_POSITION`: reference status and pulse counts; `GET_SCALE`: zero    |
+
+Bytes 36 to 55 of the `GET_POSITION` response:
+
+| Offset | Size | Contents                                                                |
+|--------|------|-------------------------------------------------------------------------|
+| 36     | 1    | Reference enable mask, bit N for encoder N                              |
+| 37     | 1    | Reference invert mask: 1 is active low, counted on the falling edge     |
+| 38     | 1    | Reference inputs active now (after inversion)                           |
+| 39     | 1    | Index armed mask: bit N is cleared when the armed pulse has zeroed the count |
+| 40     | 16   | 4 little-endian `uint32` reference pulse counts since boot              |
+
+`GET_REF_POSITION` response:
+
+| Offset | Size | Contents                                                                |
+|--------|------|-------------------------------------------------------------------------|
+| 0      | 4    | Sentinel `0x9C4E2A71` (little-endian)                                   |
+| 4      | 32   | 4 little-endian doubles: the scaled position latched at the latest reference pulse of each encoder |
+| 36     | 16   | 4 little-endian `uint32` reference pulse counts, as in `GET_POSITION`   |
+| 52     | 4    | Zero                                                                    |
+
+The HAL component reads the counts with every `GET_POSITION` and asks
+for `GET_REF_POSITION` only when a count has changed. The latched position
+is relative to the count's zero at the moment of the pulse: a later
+`RESET_POSITION`, or the zeroing of an armed index, does not move it.
 
 `GET_VERSION` response:
 
@@ -124,18 +154,20 @@ it and skip frames with another one.
 
 ## Persistent configuration
 
-Scale factors (per-encoder counts-per-unit, set via `SET_SCALE`) are
-written to the last 4 KiB sector of flash automatically, 1 s after the
-last `SET_SCALE` arrives. The 1 s debounce coalesces bursts (e.g. the
+Scale factors (per-encoder counts-per-unit, set via `SET_SCALE`) and the
+reference enable and invert masks (set via `SET_REF_CONFIG`; default: all
+four enabled, active high) are written to the last 4 KiB sector of flash
+automatically, 1 s after the last `SET_SCALE` or `SET_REF_CONFIG` arrives. The 1 s debounce coalesces bursts (e.g. the
 HAL component sending all four axes on connect) into a single flash
 write. Duplicate writes (same value) are deduplicated and do not trigger
 a save, so steady-state operation does no flash wear.
 
 On boot, `Position::init()` reads the blob and applies it before the
 LinuxCNC HAL has had a chance to (re-)send scale factors. The on-disk
-format carries a CRC32 and a schema version: corruption or schema
-mismatch causes the load to be skipped and the compile-time defaults in
-`main.cpp` to apply.
+format carries a CRC32 and a schema version: corruption or an unknown
+schema causes the load to be skipped and the compile-time defaults in
+`main.cpp` to apply. Schema 2 added the reference masks; a schema 1 blob
+(scales only) is read with the default masks.
 
 `RESET_CONFIG` (`0x08`) wipes the sector. After the next reboot, the
 device behaves as if it had never been configured.
