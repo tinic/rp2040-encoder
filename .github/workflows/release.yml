@@ -74,3 +74,38 @@ jobs:
             dist/rp2040-hal-encoder-*.uf2
             dist/rp2040-hal-encoder-*.elf
             dist/linuxcnc-hal-*.tar.gz
+
+  pcb:
+    # the carrier board's fabrication files, added to the release the job above creates
+    needs: release
+    runs-on: ubuntu-latest
+    container:
+      image: kicad/kicad:10.0
+      options: --user root
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.name }}
+
+      - name: Check schematic and board, write fabrication files
+        run: sh hardware/pcb/gen/check.sh "$GITHUB_WORKSPACE/pcb-out"
+
+      - name: Add to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          fail_on_unmatched_files: true
+          files: |
+            pcb-out/rp2040-encoder-carrier-*-gerbers.zip
+            pcb-out/rp2040-encoder-carrier-*-bom-jlcpcb.csv
+            pcb-out/rp2040-encoder-carrier-*-cpl-jlcpcb.csv

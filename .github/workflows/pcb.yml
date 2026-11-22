@@ -1,0 +1,34 @@
+name: Check PCB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hardware/pcb/**'
+      - '.github/workflows/pcb.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'hardware/pcb/**'
+      - '.github/workflows/pcb.yml'
+  workflow_dispatch:
+
+jobs:
+  pcb:
+    runs-on: ubuntu-latest
+    container:
+      image: kicad/kicad:10.0
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check schematic and board, write fabrication files
+        run: sh hardware/pcb/gen/check.sh "$GITHUB_WORKSPACE/pcb-out"
+
+      - name: Upload fabrication files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rp2040-encoder-carrier
+          path: pcb-out/
