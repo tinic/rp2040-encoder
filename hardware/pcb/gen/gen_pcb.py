@@ -195,7 +195,7 @@ def finish(board_path, ses_path):
         zone.SetZoneName(name)
         zone.SetLocalClearance(FromMM(0.3))
         zone.SetMinThickness(FromMM(0.25))
-        zone.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
+        zone.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)       # solid, no thermal spokes
         zone.SetThermalReliefGap(FromMM(0.3))
         zone.SetThermalReliefSpokeWidth(FromMM(0.4))
         zone.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
