@@ -4,7 +4,7 @@
 
 Any Python 3; calls KiCad 10's kicad-cli. Only the surface-mount parts JLCPCB is to place are in
 the BOM and the placement file. Left out, for fitting by hand: the two isolators (the owner has
-them in stock; JLCPCB had none of the narrow package), the eight headers and the RP2040-Zero.
+them in stock; JLCPCB had none of the narrow package), the four DB9 sockets, the four headers and the RP2040-Zero.
 """
 import csv
 import os
@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import design as D  # noqa: E402
 
 KICAD_CLI = r"C:\Program Files\KiCad\10.0\bin\kicad-cli.exe"
-NAME = "rp2040-encoder-carrier-r1"
+NAME = "rp2040-encoder-carrier-r2"
 
 # (kind, value) -> (JLCPCB/LCSC part number, description for the BOM's comment column).
 # All are "Basic" parts of JLCPCB's assembly library, checked in stock on 2026-11-22.

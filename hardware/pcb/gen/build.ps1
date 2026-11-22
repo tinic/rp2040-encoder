@@ -50,7 +50,7 @@ Invoke-KiCadPython @((Join-Path $PSScriptRoot "gen_pcb.py"), "finish", $board, $
 & "$kicad\kicad-cli.exe" pcb drc --severity-all --format report --output (Join-Path $Work "drc.rpt") $board | Select-Object -Last 3
 Select-String -Path (Join-Path $Work "drc.rpt") -Pattern "^\[" | ForEach-Object { ($_.Line -replace "\(.*", "").Trim() } |
     Group-Object | Sort-Object Count -Descending | ForEach-Object { "{0,4}  {1}" -f $_.Count, $_.Name }
-& "$kicad\kicad-cli.exe" pcb render --side top --width 3000 --height 700 --zoom 3.4 -o (Join-Path $Work "top.png") $board | Out-Null
-& "$kicad\kicad-cli.exe" pcb render --side bottom --width 3000 --height 700 --zoom 3.4 -o (Join-Path $Work "bottom.png") $board | Out-Null
+& "$kicad\kicad-cli.exe" pcb render --side top --width 3000 --height 1150 --zoom 2.3 -o (Join-Path $Work "top.png") $board | Out-Null
+& "$kicad\kicad-cli.exe" pcb render --side bottom --width 3000 --height 1150 --zoom 2.3 -o (Join-Path $Work "bottom.png") $board | Out-Null
 Copy-Item (Join-Path $Work "top.png"), (Join-Path $Work "bottom.png") (Join-Path $pcbDir "renders") -Force
 "schematic PDF and renders in $pcbDir; reports in $Work"

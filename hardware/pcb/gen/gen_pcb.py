@@ -37,7 +37,7 @@ def load(kind):
     return fp
 
 
-def rect_zone(board, x1, y1, x2, y2, layers):
+def poly_zone(board, points, layers):
     zone = pcbnew.ZONE(board)
     ls = pcbnew.LSET()
     for layer in layers:
@@ -45,10 +45,14 @@ def rect_zone(board, x1, y1, x2, y2, layers):
     zone.SetLayerSet(ls)
     outline = zone.Outline()
     outline.NewOutline()
-    for x, y in ((x1, y1), (x2, y1), (x2, y2), (x1, y2)):
+    for x, y in points:
         outline.Append(FromMM(x), FromMM(y))
     board.Add(zone)
     return zone
+
+
+def rect_zone(board, x1, y1, x2, y2, layers):
+    return poly_zone(board, ((x1, y1), (x2, y1), (x2, y2), (x1, y2)), layers)
 
 
 def keepout(board, x1, y1, x2, y2, layers, name):
@@ -128,7 +132,7 @@ def place(board_path, dsn_path):
                 item = pcbnew.NETINFO_ITEM(board, "unconnected-(%s-%s-Pad%s)" % (part["ref"], pin_name, number))
                 board.Add(item)
                 pad.SetNet(item)
-        if part["kind"] in ("hole", "r", "c", "cbulk"):
+        if part["kind"] in ("hole", "r", "c", "cbulk", "db9"):
             # too dense for readable designators; they are on the fabrication layer
             fp.Reference().SetVisible(False)
         fp.Value().SetVisible(False)
@@ -141,26 +145,16 @@ def place(board_path, dsn_path):
     edge.SetWidth(FromMM(0.1))
     board.Add(edge)
 
-    # isolation barrier: no copper on either layer between the two sides of the isolators
-    keepout(board, D.ISO_X - D.BARRIER_HALF, -1, D.ISO_X + D.BARRIER_HALF, D.BOARD_H + 1,
-            (pcbnew.F_Cu, pcbnew.B_Cu), "isolation barrier")
-    # nothing on the top layer under the RP2040-Zero: its underside has pads and parts
-    keepout(board, D.ZERO_X - 11.4, D.ZERO_Y - 6.3, D.ZERO_X + 11.75, D.ZERO_Y + 6.3,
-            (pcbnew.F_Cu,), "under RP2040-Zero")
+    # rule areas without copper: the isolation barrier, and the top layer under the RP2040-Zero
+    layer_ids = {"F": pcbnew.F_Cu, "B": pcbnew.B_Cu}
+    for name, x1, y1, x2, y2, layers in D.KEEPOUTS:
+        keepout(board, x1, y1, x2, y2, tuple(layer_ids[c] for c in layers), name)
 
     # silkscreen
-    for i, axis in enumerate(D.AXES):
-        text(board, "%s SCALE" % axis, D.HEADER_X[i], 0.75, 0.8)
-        text(board, "%s DRO" % axis, D.HEADER_X[i], D.BOARD_H - 0.75, 0.8)
-    barrier = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_SEGMENT)
-    barrier.SetStart(pt(D.ISO_X, 9.6))
-    barrier.SetEnd(pt(D.ISO_X, 15.4))
-    barrier.SetLayer(pcbnew.F_SilkS)
-    barrier.SetWidth(FromMM(0.2))
-    board.Add(barrier)
-    text(board, "MACHINE", D.ISO_X - 0.95, 12.5, 0.8, rot=90.0)
-    text(board, "USB", D.ISO_X + 0.95, 12.5, 0.8, rot=90.0)
-    text(board, "rp2040-encoder carrier r1", 60.0, 12.5, 0.9, layer=pcbnew.B_SilkS).SetMirrored(True)
+    for s, x, y, size, rot in D.SILK:
+        text(board, s, x, y, size, rot=rot)
+    s, x, y, size = D.BOTTOM_SILK
+    text(board, s, x, y, size, layer=pcbnew.B_SilkS).SetMirrored(True)
 
     if not pcbnew.ExportSpecctraDSN(board, dsn_path):
         raise SystemExit("DSN export failed")
@@ -168,11 +162,11 @@ def place(board_path, dsn_path):
     edge.SetEnd(pt(D.BOARD_W, D.BOARD_H))
     pcbnew.SaveBoard(board_path, board)
     print("placed %d footprints, %d nets; wrote %s" % (len(parts), len(net_items), os.path.basename(dsn_path)))
-    for ref in ("J1", "J2", "U3"):
+    for ref in ("J1", "J2", "J7", "U3"):
         fp = board.FindFootprintByReference(ref)
         pads = {p.GetNumber(): (round(pcbnew.ToMM(p.GetPosition().x), 2), round(pcbnew.ToMM(p.GetPosition().y), 2))
                 for p in fp.Pads()}
-        print(" ", ref, {k: pads[k] for k in ("1", "2", "9", "10", "21", "23") if k in pads})
+        print(" ", ref, {k: pads[k] for k in ("1", "2", "5", "9", "10", "21", "23") if k in pads})
 
 
 def finish(board_path, ses_path):
@@ -184,10 +178,8 @@ def finish(board_path, ses_path):
         if track.GetClass() != "PCB_VIA" and track.GetWidth() < FromMM(MIN_TRACK):
             track.SetWidth(FromMM(MIN_TRACK))
     nets = board.GetNetsByName()
-    left = D.ISO_X - D.BARRIER_HALF - 0.1
-    right = D.ISO_X + D.BARRIER_HALF + 0.1
-    for name, x1, x2 in (("GND1", 0.0, left), ("GND2", right, D.BOARD_W)):
-        zone = rect_zone(board, x1, 0.0, x2, D.BOARD_H, (pcbnew.F_Cu, pcbnew.B_Cu))
+    for name, outline in D.ZONES:
+        zone = poly_zone(board, outline, (pcbnew.F_Cu, pcbnew.B_Cu))
         zone.SetNet(nets["/" + name])
         zone.SetZoneName(name)
         zone.SetLocalClearance(FromMM(0.3))
