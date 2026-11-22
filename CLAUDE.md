@@ -107,7 +107,7 @@ The device implements a vendor-specific USB interface with the following command
 - **0x04** - Get Scale: Returns 32 bytes (4 doubles) with scale factors for all encoders
 - **0x05** - Reset Encoder: Resets encoder position to zero (requires 1 byte encoder index)
 - **0x09** - Set Reference Config: Sets per-axis R-pulse enable and invert bitmasks (`[0x09, enable_mask, invert_mask]`, persisted in flash; default `enable_mask=0x0F`, `invert_mask=0x00`)
-- **0x0A** - Get Reference Position: Returns 64 bytes (`[sentinel 0x9C4E2A71: 4][4 doubles ref_positions: 32][4 uint32 ref_counts: 16]`)
+- **0x0A** - Get Reference Position: Returns 56 bytes like every response (`[sentinel 0x9C4E2A71: 4][4 doubles ref_positions: 32][4 uint32 ref_counts: 16]`)
 - **0x0B** - Arm Index: Arms or disarms LinuxCNC `index-enable` zero-on-next-R for an axis (`[0x0B, encoder_index, arm]`)
 
 Position data format: 4 double-precision floating point values (little-endian)

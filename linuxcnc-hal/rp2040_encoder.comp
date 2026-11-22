@@ -82,12 +82,14 @@ static void cleanup_usb(void) {
     }
 }
 
-// Reads the response to one request. The firmware answers with one 64-byte packet, which is a
-// whole number of USB packets, so TinyUSB ends the transfer with a zero-length packet. A read of
-// 64 bytes completes on the data packet and leaves that empty packet at the head of the pipe:
-// without skipping it here, every second read returned nothing and the answer to one request
-// was taken for the answer to the next (GET_REF_POSITION then never matched its sentinel).
-// Frames with another sentinel are answers nobody collected and are skipped as well.
+// Reads the response to one request. Firmware up to v3.0.0 answers with one 64-byte packet,
+// which is a whole number of USB packets, so TinyUSB ends the transfer with a zero-length
+// packet. A read of 64 bytes completes on the data packet and leaves that empty packet at the
+// head of the pipe: without skipping it here, every second read returned nothing and the answer
+// to one request was taken for the answer to the next (GET_REF_POSITION then never matched its
+// sentinel). Later firmware answers with 56 bytes, one short packet and nothing after it; both
+// are read here. Frames with another sentinel are answers nobody collected and are skipped as
+// well.
 static int read_response(uint8_t *buf, int size, uint32_t sentinel, int min_length, int *length) {
     for (int tries = 0; tries < 8; tries++) {
         int n = 0;
@@ -194,12 +196,13 @@ void user_mainloop(void) {
                         int vlen = 0;
                         int vr = libusb_bulk_transfer(dev_handle, EP_OUT, version_buf, 1, &vlen, 200);
                         if (vr == 0) {
-                            vr = read_response(version_buf, sizeof(version_buf), VERSION_DATA_SENTINEL, 64, &vlen);
-                            if (vr == 0 && vlen >= 64) {
+                            // 64 bytes from firmware up to v3.0.0, 56 bytes from later firmware.
+                            vr = read_response(version_buf, sizeof(version_buf), VERSION_DATA_SENTINEL, 56, &vlen);
+                            if (vr == 0 && vlen >= 56) {
                                 uint32_t vsentinel = 0;
                                 memcpy(&vsentinel, version_buf, sizeof(vsentinel));
                                 if (vsentinel == VERSION_DATA_SENTINEL) {
-                                    version_buf[63] = '\0';  // belt + suspenders
+                                    version_buf[vlen - 1] = '\0';  // belt + suspenders
                                     printf("rp2040_encoder: Firmware version: %s\n",
                                            (const char*)(version_buf + sizeof(vsentinel)));
                                     fflush(stdout);

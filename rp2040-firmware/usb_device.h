@@ -27,6 +27,13 @@ class USBDevice {
     static constexpr uint8_t VENDOR_REQUEST_GET_REF_POSITION = 0x0A;
     static constexpr uint8_t VENDOR_REQUEST_ARM_INDEX = 0x0B;
 
+    // Every response is this long. It must stay below the endpoint's 64-byte packet size: a
+    // response that fills a packet exactly is followed by a zero-length packet to end the
+    // transfer, and a host that reads 64 bytes leaves that empty packet queued, so that its
+    // next read returns nothing and every answer is taken one request late. 56 bytes is the
+    // longest payload (GET_POSITION) and goes out as one short packet.
+    static constexpr size_t kResponseSize = 56;
+
     static constexpr uint32_t POSITION_DATA_SENTINEL = 0x3F8A7C91;
     static constexpr uint32_t SCALE_DATA_SENTINEL = 0x7B2D4E8F;
     static constexpr uint32_t VERSION_DATA_SENTINEL = 0x5A1B9C3D;
