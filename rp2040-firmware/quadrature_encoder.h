@@ -18,10 +18,10 @@ class QuadratureEncoder {
     // After a reference edge the input of that encoder is not counted again until its count is
     // kRefRearmCounts from the count at the edge AND the input has been inactive, without any
     // edge, for kRefQuietUs. A reference pulse has slow, noisy flanks: an axis that moves slowly
-    // over the mark, or stops on its flank, would otherwise deliver hundreds of edges (about 250
-    // in one pass were seen on a 5 um glass scale). Distance alone was not enough: on one pass
-    // at 10 mm/s edges still arrived more than 32 counts after the first. Both values are far
-    // below the distance and the time between two marks or two index pulses.
+    // over the mark, or stops on its flank, would otherwise deliver many edges (about 100 in one
+    // pass were seen on a 5 um glass scale). On that scale the distance rule alone already gave
+    // one count per crossing; the quiet time is there for a flank that is longer or noisier.
+    // Both values are far below the distance and the time between two marks or index pulses.
     static constexpr int32_t kRefRearmCounts = 32;
     static constexpr uint32_t kRefQuietUs = 2000;
 

@@ -94,7 +94,7 @@ Things to know when using them:
   holds that first edge. Two crossings closer together than that, in distance or in
   time, count once. Arming `index-enable-N` lets the input count again at once.
 - Firmware v3.0.0 does not debounce the input: on one scale a slow pass over the mark
-  counted about 250 edges within a few counts, where passes by hand had counted one each,
+  counted about 100 edges within a few counts, where passes by hand had counted one each,
   and `ref-position-N` held the last of them. With that firmware treat a change of
   `ref-count-N` as "the mark was crossed", not as a number of crossings.
 - `ref-position-N` is in the count the scale had when the pulse arrived. Zeroing the
