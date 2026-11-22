@@ -20,7 +20,7 @@ PROJECT_FP = os.path.join(os.path.dirname(HERE), "lib", "rp2040_encoder.pretty")
 
 
 ROUTER_EDGE_INSET = 0.5   # mm
-MIN_TRACK = 0.15          # mm
+SIGNAL_TRACK = 0.25       # mm
 POWER_TRACK = 0.4         # mm
 STITCH_VIA = 0.6          # mm
 STITCH_PITCH = 3.0        # mm, least distance between ground vias
@@ -102,7 +102,7 @@ def place(board_path, dsn_path):
     settings.m_TentViasBack = True
     netclass = settings.m_NetSettings.GetDefaultNetclass()
     netclass.SetClearance(FromMM(0.2))
-    netclass.SetTrackWidth(FromMM(0.25))
+    netclass.SetTrackWidth(FromMM(SIGNAL_TRACK))
     netclass.SetViaDiameter(FromMM(0.6))
     netclass.SetViaDrill(FromMM(0.3))
     # supply nets of the machine side get wider tracks (the same class is in the project file)
@@ -225,10 +225,17 @@ def finish(board_path, ses_path):
     board = pcbnew.LoadBoard(board_path)
     if not pcbnew.ImportSpecctraSES(board, ses_path):
         raise SystemExit("SES import failed")
-    # the router necks tracks down at fine-pitch pads; nothing thinner than the board's minimum
+    # The router necks tracks down near pads; every track gets the one width of its net class.
+    # That brings a few tracks at the isolator pins closer than the 0.2 mm the router keeps, so
+    # the project file checks for 0.15 mm.
+    power = set()
+    for net in board.GetNetsByName().values():
+        name = str(net.GetNetname())
+        if name in ("/VCC1", "/VCC1_RAW") or (len(name) == 5 and name.endswith("_D1")):
+            power.add(net.GetNetCode())
     for track in board.GetTracks():
-        if track.GetClass() != "PCB_VIA" and track.GetWidth() < FromMM(MIN_TRACK):
-            track.SetWidth(FromMM(MIN_TRACK))
+        if track.GetClass() != "PCB_VIA":
+            track.SetWidth(FromMM(POWER_TRACK if track.GetNetCode() in power else SIGNAL_TRACK))
     nets = board.GetNetsByName()
     for name, outline in D.ZONES:
         zone = poly_zone(board, outline, (pcbnew.F_Cu, pcbnew.B_Cu))
