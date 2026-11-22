@@ -78,7 +78,7 @@ to GP29; see [`../hardware/README.md`](../hardware/README.md) for the wiring.
 |-----|------|---------|---------|
 | `ref-enable-N` | bit in | 1 | Recognise reference pulses on this scale. Kept in the device's flash |
 | `ref-invert-N` | bit in | 0 | 0: the pulse is active high and counted on its rising edge. 1: active low, counted on its falling edge. Kept in the device's flash |
-| `ref-count-N` | u32 out | | Reference pulses seen since the device was powered or reset: one per crossing of a mark with firmware after v3.0.0, possibly many with v3.0.0 (see below). It starts at 0 again after a reboot of the device, not after a restart of LinuxCNC |
+| `ref-count-N` | u32 out | | Reference pulses seen since the device was powered or reset: one per crossing of a mark with firmware v3.1.0 and later, possibly many with v3.0.0 (see below). It starts at 0 again after a reboot of the device, not after a restart of LinuxCNC |
 | `ref-position-N` | float out | | Position of the scale at the latest reference pulse, latched in the device at the edge, in the units and sign of `position-N`. It follows `ref-count-N` by one USB round trip |
 | `ref-state-N` | bit out | | The reference input is active now. A pulse can be shorter than the time between two readings: use `ref-count-N` to see that one happened |
 | `index-enable-N` | bit io | 0 | LinuxCNC's index handshake: set it and the device zeroes the count of that scale at the next reference pulse, then the component clears the pin |
@@ -88,7 +88,7 @@ Things to know when using them:
 - A pulse is counted on an edge. An axis that stands on its reference mark when the
   device starts has `ref-state-N` true and `ref-count-N` 0 until it leaves the mark and
   crosses it again.
-- Firmware after v3.0.0 counts one edge per crossing: after an edge the input does not
+- Firmware v3.1.0 and later counts one edge per crossing: after an edge the input does not
   count again until the axis has moved 32 counts away from it (0.16 mm at 0.005 mm per
   count) and the input has been inactive, without an edge, for 2 ms. `ref-position-N`
   holds that first edge. Two crossings closer together than that, in distance or in
@@ -121,9 +121,9 @@ halcmd show pin rp2040-encoder.0.ref
 
 | Component | Firmware | Works |
 |-----------|----------|-------|
-| after v3.0.0 | after v3.0.0 (56-byte responses) | Yes |
-| after v3.0.0 | up to v3.0.0 (64-byte responses) | Yes: the component skips the empty packet that follows each response |
-| v3.0.0 | after v3.0.0 | Not tested. From the source: positions and reference data are read, the firmware version is not printed |
+| v3.1.0 and later | v3.1.0 and later (56-byte responses) | Yes |
+| v3.1.0 and later | up to v3.0.0 (64-byte responses) | Yes: the component skips the empty packet that follows each response |
+| v3.0.0 | v3.1.0 and later | Not tested. From the source: positions and reference data are read, the firmware version is not printed |
 | v3.0.0 | v3.0.0 | `ref-position-N` can stay at 0 although `ref-count-N` counts (seen on one machine): update the component |
 
 The component prints the firmware version when it connects

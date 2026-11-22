@@ -87,7 +87,7 @@ static void cleanup_usb(void) {
 // packet. A read of 64 bytes completes on the data packet and leaves that empty packet at the
 // head of the pipe: without skipping it here, every second read returned nothing and the answer
 // to one request was taken for the answer to the next (GET_REF_POSITION then never matched its
-// sentinel). Later firmware answers with 56 bytes, one short packet and nothing after it; both
+// sentinel). Firmware v3.1.0 and later answers with 56 bytes, one short packet and nothing after it; both
 // are read here. Frames with another sentinel are answers nobody collected and are skipped as
 // well.
 static int read_response(uint8_t *buf, int size, uint32_t sentinel, int min_length, int *length) {
@@ -196,7 +196,7 @@ void user_mainloop(void) {
                         int vlen = 0;
                         int vr = libusb_bulk_transfer(dev_handle, EP_OUT, version_buf, 1, &vlen, 200);
                         if (vr == 0) {
-                            // 64 bytes from firmware up to v3.0.0, 56 bytes from later firmware.
+                            // 64 bytes from firmware up to v3.0.0, 56 bytes from v3.1.0 on.
                             vr = read_response(version_buf, sizeof(version_buf), VERSION_DATA_SENTINEL, 56, &vlen);
                             if (vr == 0 && vlen >= 56) {
                                 uint32_t vsentinel = 0;
