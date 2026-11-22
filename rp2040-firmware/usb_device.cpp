@@ -192,7 +192,7 @@ bool USBDevice::send_position_data() const {
         return false;
     }
 
-    static std::array<uint8_t, 64> buffer{};
+    static std::array<uint8_t, kResponseSize> buffer{};
     buffer.fill(0);
     size_t bytes = 0;
 
@@ -221,7 +221,7 @@ bool USBDevice::send_ref_position_data() const {
         return false;
     }
 
-    static std::array<uint8_t, 64> buffer{};
+    static std::array<uint8_t, kResponseSize> buffer{};
     buffer.fill(0);
     size_t bytes = 0;
 
@@ -250,8 +250,8 @@ bool USBDevice::send_version_data() const {
         return false;
     }
 
-    // Layout: [sentinel:4][version-string zero-padded:60] = 64 bytes total.
-    static std::array<uint8_t, 64> buffer{};
+    // Layout: [sentinel:4][version-string zero-padded:52] = kResponseSize bytes total.
+    static std::array<uint8_t, kResponseSize> buffer{};
     buffer.fill(0);
 
     const uint32_t sentinel = VERSION_DATA_SENTINEL;
@@ -282,7 +282,7 @@ bool USBDevice::send_scale_data() const {
         return false;
     }
 
-    static std::array<uint8_t, 64> buffer{};
+    static std::array<uint8_t, kResponseSize> buffer{};
     const Position& pos = Position::instance();
 
     const uint32_t sentinel = SCALE_DATA_SENTINEL;

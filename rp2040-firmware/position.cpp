@@ -99,7 +99,7 @@ bool Position::get(uint8_t* out, size_t& bytes) {
         update_from_encoders();
     }
 
-    // Layout (56 bytes within the 64-byte USB packet):
+    // Layout (56 bytes, the whole response: USBDevice::kResponseSize):
     //   [0..3]   uint32_t sentinel (POSITION_DATA_SENTINEL)
     //   [4..35]  double   positions[4]
     //   [36]     uint8_t  ref_enable_mask
@@ -107,6 +107,8 @@ bool Position::get(uint8_t* out, size_t& bytes) {
     //   [38]     uint8_t  ref_live_mask
     //   [39]     uint8_t  index_armed_mask
     //   [40..55] uint32_t ref_pulse_counts[4]
+    static_assert(sizeof(uint32_t) + sizeof(positions) + 4U + sizeof(ref_pulse_counts) <= USBDevice::kResponseSize,
+                  "the position response must fit one short packet");
     bytes = sizeof(uint32_t) + sizeof(positions) + 4U + sizeof(ref_pulse_counts);
     if (out != nullptr) {
         uint32_t sentinel = USBDevice::POSITION_DATA_SENTINEL;
@@ -134,10 +136,12 @@ bool Position::get_ref_positions(uint8_t* out, size_t& bytes) {
         update_from_encoders();
     }
 
-    // Layout (52 bytes within the 64-byte USB packet):
+    // Layout (52 bytes of the 56-byte response, the rest is zero):
     //   [0..3]   uint32_t sentinel (REF_POSITION_DATA_SENTINEL)
     //   [4..35]  double   ref_positions[4]
     //   [36..51] uint32_t ref_pulse_counts[4]
+    static_assert(sizeof(uint32_t) + sizeof(ref_positions) + sizeof(ref_pulse_counts) <= USBDevice::kResponseSize,
+                  "the reference position response must fit one short packet");
     bytes = sizeof(uint32_t) + sizeof(ref_positions) + sizeof(ref_pulse_counts);
     if (out != nullptr) {
         uint32_t sentinel = USBDevice::REF_POSITION_DATA_SENTINEL;

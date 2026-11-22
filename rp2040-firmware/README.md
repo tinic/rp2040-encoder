@@ -14,8 +14,8 @@ overview.
   positions[] directly via const member functions.
 - USB vendor-class device (VID `0x2E8A`, PID `0xC0DE`) speaks the
   request/response protocol below; framing is one command per transfer,
-  responses are padded to one EP max-packet (64 bytes), every write is
-  followed by `tud_vendor_n_write_flush`.
+  responses are 56 bytes (one short packet on the 64-byte endpoint), every
+  write is followed by `tud_vendor_n_write_flush`.
 - Watchdog reset at 1000 ms keeps a hung `tud_task` from wedging the
   device; reboot triggers USB re-enumeration.
 
@@ -79,40 +79,48 @@ do this copy automatically; see the `FLASH_DEVICE_PATH` cache variable.
 Vendor-class endpoints (VID `0x2E8A`, PID `0xC0DE`):
 
 - `EP_OUT 0x01` — host writes one command per transfer.
-- `EP_IN 0x81` — device writes one 64-byte response per transfer.
+- `EP_IN 0x81` — device writes one 56-byte response per transfer.
 
 ### Commands (host → device)
 
 | Opcode | Name                | Payload                                | Response          |
 |--------|---------------------|----------------------------------------|-------------------|
-| `0x01` | GET_POSITION        | none                                   | 64-byte position  |
+| `0x01` | GET_POSITION        | none                                   | 56-byte position  |
 | `0x02` | SET_TEST_MODE       | 1 byte: 0=off, 1=sine, 2=circular, 3=ramp, 4=random | none |
 | `0x03` | SET_SCALE           | 1 byte idx + 8-byte double; auto-persists after 1 s debounce | none |
-| `0x04` | GET_SCALE           | none                                   | 64-byte scale     |
+| `0x04` | GET_SCALE           | none                                   | 56-byte scale     |
 | `0x05` | RESET_POSITION      | 1 byte idx                             | none              |
-| `0x06` | GET_VERSION         | none                                   | 64-byte version   |
+| `0x06` | GET_VERSION         | none                                   | 56-byte version   |
 | `0x07` | BOOTSEL             | none; reboots into BOOTSEL (2e8a:0003) | (device drops off bus) |
 | `0x08` | RESET_CONFIG        | none; erases the persisted scales blob; takes effect on next boot | none |
 
 ### Responses (device → host)
 
-Both `GET_POSITION` and `GET_SCALE` responses are exactly 64 bytes:
+Every response is exactly 56 bytes. `GET_POSITION` and `GET_SCALE`:
 
 | Offset | Size | Contents                                                                |
 |--------|------|-------------------------------------------------------------------------|
 | 0      | 4    | Sentinel: `0x3F8A7C91` for position, `0x7B2D4E8F` for scale (little-endian) |
 | 4      | 32   | 4 little-endian doubles                                                 |
-| 36     | 28   | Zero padding                                                            |
+| 36     | 20   | `GET_POSITION`: reference status and pulse counts; `GET_SCALE`: zero    |
 
-`GET_VERSION` response (also 64 bytes):
+`GET_VERSION` response:
 
 | Offset | Size | Contents                                                                |
 |--------|------|-------------------------------------------------------------------------|
 | 0      | 4    | Sentinel `0x5A1B9C3D` (little-endian)                                   |
-| 4      | 60   | Zero-padded ASCII `GIT_VERSION` (`v1.0.0`, `v1.0.0-3-gabc-dirty`, ...)  |
+| 4      | 52   | Zero-padded ASCII `GIT_VERSION` (`v1.0.0`, `v1.0.0-3-gabc-dirty`, ...)  |
 
-The sentinel is a sanity check, not the framing primitive — framing is
-guaranteed by one-transfer-per-command and full-EP-packet responses.
+Responses are shorter than the endpoint's 64-byte packet on purpose. A
+response that fills a packet exactly is followed by a zero-length packet
+that ends the transfer; a host reading 64 bytes leaves that empty packet
+queued, its next read returns nothing, and every answer arrives one
+request late. That is what firmware up to v3.0.0 did with its 64-byte
+responses. A 56-byte response is one short packet with nothing after it.
+
+Framing is one transfer per command and one short packet per response.
+The sentinel says which request a response answers; a host should check
+it and skip frames with another one.
 
 ## Persistent configuration
 
