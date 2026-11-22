@@ -8,6 +8,7 @@
 #include "hardware/irq.h"
 #include "hardware/structs/dma.h"
 #include "hardware/sync.h"
+#include "hardware/timer.h"
 #include "quadrature_encoder.pio.h"
 
 namespace {
@@ -30,6 +31,7 @@ void QuadratureEncoder::init() {
     std::fill_n(std::begin(ref_pulse_counts), kNumEncoders, 0U);
     std::fill_n(std::begin(ref_positions), kNumEncoders, 0);
     std::fill_n(std::begin(ref_edge_counts), kNumEncoders, 0);
+    std::fill_n(std::begin(ref_last_edge_us), kNumEncoders, 0U);
     index_armed_mask = 0U;
     ref_holdoff_mask = 0U;
 
@@ -152,6 +154,12 @@ void QuadratureEncoder::handle_ref_irq(uint gpio, uint32_t events) {
     if ((ref_enable_mask & bit) == 0U) {
         return;
     }
+    // The pulse of this mark has been counted: what follows on its flanks only keeps the input
+    // from counting again too early.
+    if ((ref_holdoff_mask & bit) != 0U) {
+        ref_last_edge_us[idx] = time_us_32();
+        return;
+    }
     const uint32_t expected_edge = ((ref_invert_mask & bit) != 0U) ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
     if ((events & expected_edge) == 0U) {
         return;
@@ -162,11 +170,13 @@ void QuadratureEncoder::handle_ref_irq(uint gpio, uint32_t events) {
     ref_positions[idx] = static_cast<int32_t>(rel);
     ref_pulse_counts[idx] = ref_pulse_counts[idx] + 1U;
 
-    // This edge is the pulse. Whatever else the flank delivers is not counted, and does not
-    // interrupt either: the input stays off until service_ref_inputs() sees the axis gone.
+    // This edge is the pulse. Whatever else the flanks deliver is not counted; both edges stay
+    // on so that every one of them is seen and timed until service_ref_inputs() finds the
+    // axis gone and the input quiet.
     ref_edge_counts[idx] = raw;
+    ref_last_edge_us[idx] = time_us_32();
     ref_holdoff_mask = static_cast<uint8_t>(ref_holdoff_mask | bit);
-    gpio_set_irq_enabled(gpio, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false);
+    gpio_set_irq_enabled(gpio, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
 
     if ((index_armed_mask & bit) != 0U) {
         count_offsets[idx] = raw;
@@ -178,7 +188,8 @@ void QuadratureEncoder::rearm_ref_pin_locked(size_t encoder_idx) {
     const uint pin = kRefBasePin + static_cast<uint>(encoder_idx);
     const auto bit = static_cast<uint8_t>(1U << encoder_idx);
     ref_holdoff_mask = static_cast<uint8_t>(ref_holdoff_mask & static_cast<uint8_t>(~bit));
-    // Edges that arrived while the input was off are not a pulse.
+    // Back to the one edge that is a pulse; what is pending from the flanks is not one.
+    gpio_set_irq_enabled(pin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, false);
     gpio_acknowledge_irq(pin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL);
     if ((ref_enable_mask & bit) != 0U) {
         const uint32_t edge = ((ref_invert_mask & bit) != 0U) ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
@@ -198,11 +209,21 @@ void QuadratureEncoder::service_ref_inputs() {
         // Unsigned difference, as in get_all_counts: the counter may wrap.
         const auto moved =
             static_cast<int32_t>(static_cast<uint32_t>(positions[i]) - static_cast<uint32_t>(ref_edge_counts[i]));
-        if (moved >= kRefRearmCounts || moved <= -kRefRearmCounts) {
-            const uint32_t irq = save_and_disable_interrupts();
-            rearm_ref_pin_locked(i);
-            restore_interrupts(irq);
+        if (moved < kRefRearmCounts && moved > -kRefRearmCounts) {
+            continue;
         }
+        const bool pin_high = gpio_get(kRefBasePin + static_cast<uint>(i));
+        const bool inverted = (ref_invert_mask & bit) != 0U;
+        if (pin_high != inverted) {
+            continue;  // still active
+        }
+        // Checked with interrupts off, so that an edge cannot slip in between the look at
+        // its time and the switch back to counting.
+        const uint32_t irq = save_and_disable_interrupts();
+        if (time_us_32() - ref_last_edge_us[i] >= kRefQuietUs) {
+            rearm_ref_pin_locked(i);
+        }
+        restore_interrupts(irq);
     }
 }
 
