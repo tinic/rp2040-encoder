@@ -98,6 +98,8 @@ def place(board_path, dsn_path):
     settings.m_ViasMinSize = FromMM(0.6)
     settings.m_MinThroughDrill = FromMM(0.3)
     settings.m_CopperEdgeClearance = FromMM(0.4)
+    settings.m_TentViasFront = True       # every via covered by solder mask, both sides
+    settings.m_TentViasBack = True
     netclass = settings.m_NetSettings.GetDefaultNetclass()
     netclass.SetClearance(FromMM(0.2))
     netclass.SetTrackWidth(FromMM(0.25))
