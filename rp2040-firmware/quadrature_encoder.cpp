@@ -95,7 +95,7 @@ void QuadratureEncoder::setup_ref_pins() {
     for (size_t i = 0; i < kNumEncoders; i++) {
         const uint pin = kRefBasePin + static_cast<uint>(i);
         gpio_init(pin);
-        gpio_set_dir(pin, GPIO_IN);
+        gpio_set_dir(pin, false);
     }
     gpio_set_irq_callback(&QuadratureEncoder::gpio_irq_callback);
     configure_ref_pins_locked();
@@ -165,8 +165,8 @@ void QuadratureEncoder::handle_ref_irq(uint gpio, uint32_t events) {
 }
 
 void QuadratureEncoder::set_ref_config(uint8_t enable_mask, uint8_t invert_mask) {
-    const uint8_t masked_enable = static_cast<uint8_t>(enable_mask & kAllAxesMask);
-    const uint8_t masked_invert = static_cast<uint8_t>(invert_mask & kAllAxesMask);
+    const auto masked_enable = static_cast<uint8_t>(enable_mask & kAllAxesMask);
+    const auto masked_invert = static_cast<uint8_t>(invert_mask & kAllAxesMask);
     const uint32_t irq = save_and_disable_interrupts();
     ref_enable_mask = masked_enable;
     ref_invert_mask = masked_invert;

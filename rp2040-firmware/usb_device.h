@@ -34,7 +34,7 @@ class USBDevice {
 
     static USBDevice& instance();
 
-    void init();
+    static void init();
     void task() const;
     [[nodiscard]] bool send_position_data() const;
     [[nodiscard]] bool send_scale_data() const;

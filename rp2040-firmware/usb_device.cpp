@@ -74,7 +74,7 @@ const char* get_serial_string() {
 USBDevice& USBDevice::instance() {
     static USBDevice device;
     if (!device.initialized) {
-        device.init();
+        USBDevice::init();
         device.initialized = true;
     }
     return device;

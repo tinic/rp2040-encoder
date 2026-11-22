@@ -56,7 +56,7 @@ class Position {
 
     void set_scale(size_t pos, double scale);
     void set_ref_config(uint8_t enable_mask, uint8_t invert_mask);
-    void arm_index(size_t pos, bool arm);
+    void arm_index(size_t pos, bool arm) const;
 
     // True at boot when init() found NO valid persisted config. main.cpp
     // gates its compile-time defaults on this so that USB-set scales are

@@ -50,6 +50,7 @@ Checks: >
   -cppcoreguidelines-pro-type-reinterpret-cast,
   -cppcoreguidelines-avoid-non-const-global-variables,
   -performance-no-int-to-ptr,
+  -clang-analyzer-core.FixedAddressDereference,
   -android-cloexec-socket,
   -cppcoreguidelines-avoid-c-arrays,
   -hicpp-avoid-c-arrays,

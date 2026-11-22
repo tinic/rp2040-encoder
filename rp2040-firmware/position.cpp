@@ -48,8 +48,8 @@ void Position::set_scale(size_t pos, double scale) {
 }
 
 void Position::set_ref_config(uint8_t enable_mask, uint8_t invert_mask) {
-    const uint8_t masked_enable = static_cast<uint8_t>(enable_mask & QuadratureEncoder::kAllAxesMask);
-    const uint8_t masked_invert = static_cast<uint8_t>(invert_mask & QuadratureEncoder::kAllAxesMask);
+    const auto masked_enable = static_cast<uint8_t>(enable_mask & QuadratureEncoder::kAllAxesMask);
+    const auto masked_invert = static_cast<uint8_t>(invert_mask & QuadratureEncoder::kAllAxesMask);
     if (ref_enable_mask == masked_enable && ref_invert_mask == masked_invert) {
         return;  // dedup: no-op writes do not arm the auto-save
     }
@@ -60,7 +60,7 @@ void Position::set_ref_config(uint8_t enable_mask, uint8_t invert_mask) {
     config_dirty_since_ms = to_ms_since_boot(get_absolute_time());
 }
 
-void Position::arm_index(size_t pos, bool arm) {
+void Position::arm_index(size_t pos, bool arm) const {
     if (!initialized || pos >= kPositions) {
         return;
     }
