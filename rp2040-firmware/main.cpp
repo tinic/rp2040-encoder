@@ -26,6 +26,7 @@ int main() {
 
     while (true) {
         USBDevice::instance().task();
+        QuadratureEncoder::instance().service_ref_inputs();
         pos.tick();
         watchdog_update();
     }
