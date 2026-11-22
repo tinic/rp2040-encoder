@@ -82,6 +82,31 @@ static void cleanup_usb(void) {
     }
 }
 
+// Reads the response to one request. The firmware answers with one 64-byte packet, which is a
+// whole number of USB packets, so TinyUSB ends the transfer with a zero-length packet. A read of
+// 64 bytes completes on the data packet and leaves that empty packet at the head of the pipe:
+// without skipping it here, every second read returned nothing and the answer to one request
+// was taken for the answer to the next (GET_REF_POSITION then never matched its sentinel).
+// Frames with another sentinel are answers nobody collected and are skipped as well.
+static int read_response(uint8_t *buf, int size, uint32_t sentinel, int min_length, int *length) {
+    for (int tries = 0; tries < 8; tries++) {
+        int n = 0;
+        int r = libusb_bulk_transfer(dev_handle, EP_IN, buf, size, &n, 100);
+        if (r != 0) {
+            return r;
+        }
+        if (n >= min_length && n >= (int)sizeof(uint32_t)) {
+            uint32_t found = 0;
+            memcpy(&found, buf, sizeof(found));
+            if (found == sentinel) {
+                *length = n;
+                return 0;
+            }
+        }
+    }
+    return LIBUSB_ERROR_OTHER;
+}
+
 static int init_usb(void) {
     int r;
     
@@ -151,10 +176,12 @@ void user_mainloop(void) {
                         {
                             uint8_t drain_buf[64];
                             int drain_len = 0;
-                            for (int drained = 0; drained < 8; drained++) {
+                            for (int drained = 0; drained < 16; drained++) {
                                 int dr = libusb_bulk_transfer(dev_handle, EP_IN, drain_buf,
                                                               sizeof(drain_buf), &drain_len, 20);
-                                if (dr != 0 || drain_len == 0) {
+                                // An empty packet ends a response, not the queue: only a
+                                // timeout says the pipe is empty.
+                                if (dr != 0) {
                                     break;
                                 }
                             }
@@ -167,7 +194,7 @@ void user_mainloop(void) {
                         int vlen = 0;
                         int vr = libusb_bulk_transfer(dev_handle, EP_OUT, version_buf, 1, &vlen, 200);
                         if (vr == 0) {
-                            vr = libusb_bulk_transfer(dev_handle, EP_IN, version_buf, sizeof(version_buf), &vlen, 200);
+                            vr = read_response(version_buf, sizeof(version_buf), VERSION_DATA_SENTINEL, 64, &vlen);
                             if (vr == 0 && vlen >= 64) {
                                 uint32_t vsentinel = 0;
                                 memcpy(&vsentinel, version_buf, sizeof(vsentinel));
@@ -219,7 +246,7 @@ void user_mainloop(void) {
                     actual_length = 0;
                     r = libusb_bulk_transfer(dev_handle, EP_OUT, buffer, 1, &actual_length, 100);
                     if (r == 0) {
-                        r = libusb_bulk_transfer(dev_handle, EP_IN, buffer, sizeof(buffer), &actual_length, 100);
+                        r = read_response(buffer, sizeof(buffer), SCALE_DATA_SENTINEL, 36, &actual_length);
                         if (r == 0 && actual_length >= 36) {
                             uint32_t sentinel = 0;
                             memcpy(&sentinel, buffer, sizeof(sentinel));
@@ -316,7 +343,7 @@ void user_mainloop(void) {
                     r = libusb_bulk_transfer(dev_handle, EP_OUT, buffer, 1, &actual_length, 100);
                     if (r == 0) {
                         // Read position response
-                        r = libusb_bulk_transfer(dev_handle, EP_IN, buffer, 64, &actual_length, 100);
+                        r = read_response(buffer, 64, POSITION_DATA_SENTINEL, 36, &actual_length);
                         if (r == 0 && actual_length >= 36) {
                             uint32_t sentinel = 0;
                             memcpy(&sentinel, buffer, sizeof(sentinel));
@@ -358,8 +385,8 @@ void user_mainloop(void) {
                                         ref_buf[0] = VENDOR_REQUEST_GET_REF_POSITION;
                                         int rr = libusb_bulk_transfer(dev_handle, EP_OUT, ref_buf, 1, &ref_len, 100);
                                         if (rr == 0) {
-                                            rr = libusb_bulk_transfer(dev_handle, EP_IN, ref_buf, sizeof(ref_buf),
-                                                                      &ref_len, 100);
+                                            rr = read_response(ref_buf, sizeof(ref_buf), REF_POSITION_DATA_SENTINEL,
+                                                               52, &ref_len);
                                             if (rr == 0 && ref_len >= 52) {
                                                 uint32_t rsentinel = 0;
                                                 memcpy(&rsentinel, ref_buf, sizeof(rsentinel));
