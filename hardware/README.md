@@ -62,6 +62,8 @@ Glass scales with a reference/index track (e.g. 50 mm periodic marks on Sino/Dit
 | 2       | Z    | GPIO 28     | R (Index) | Enabled by default; internal pull-down keeps unwired pins quiet |
 | 3       | A    | GPIO 29     | R (Index) | Enabled by default; internal pull-down keeps unwired pins quiet |
 
+Not every scale has periodic marks. The three scales of one Grizzly G0759 retrofit each give exactly one pulse over their whole travel (404, 140 and 262 mm). To find out what a scale gives, watch `rp2040-encoder.0.ref-count-N` and `ref-position-N` while moving the axis from one end to the other; the HAL pins are described in [`../linuxcnc-hal/README.md`](../linuxcnc-hal/README.md).
+
 Because the primary `ISO7760FDBQR` consumes all 6 channels for X/Y/Z A+B, wire R signals through an additional 3.3 V-output isolator (such as an `ISO7740F` for 4 channels) — never feed 5 V directly into GP26–GP29. When unused, leave GP26–GP29 disconnected; internal pull-downs prevent floating interrupts and main position counting is unaffected unless `index-enable-N` is armed.
 
 Power and ground:
