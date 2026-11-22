@@ -149,7 +149,8 @@ response that fills a packet exactly is followed by a zero-length packet
 that ends the transfer; a host reading 64 bytes leaves that empty packet
 queued, its next read returns nothing, and every answer arrives one
 request late. That is what firmware up to v3.0.0 did with its 64-byte
-responses. A 56-byte response is one short packet with nothing after it.
+responses. A 56-byte response, as v3.1.0 and later send it, is one short
+packet with nothing after it.
 
 Framing is one transfer per command and one short packet per response.
 The sentinel says which request a response answers; a host should check
