@@ -22,6 +22,8 @@ PROJECT_FP = os.path.join(os.path.dirname(HERE), "lib", "rp2040_encoder.pretty")
 ROUTER_EDGE_INSET = 0.5   # mm
 MIN_TRACK = 0.15          # mm
 POWER_TRACK = 0.4         # mm
+STITCH_VIA = 0.6          # mm
+STITCH_PITCH = 3.0        # mm, least distance between ground vias
 POWER_NETS = ("/VCC1", "/VCC1_RAW", "/?_D1")
 
 
@@ -180,6 +182,43 @@ def place(board_path, dsn_path):
         print(" ", ref, {k: pads[k] for k in ("1", "2", "5", "9", "10", "21", "23") if k in pads})
 
 
+def stitch(board):
+    """Ties the top and bottom ground pours together with vias wherever both have copper, so that
+    the strips of pour left between tracks are not dead ends. Returns the number of vias added."""
+    margin = FromMM(STITCH_VIA / 2 + 0.2)           # the via's copper plus room around it
+    pads = [p for fp in board.GetFootprints() for p in fp.Pads()]
+    count = 0
+    for zone in [z for z in board.Zones() if not z.GetIsRuleArea()]:
+        cores = []
+        for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
+            core = pcbnew.SHAPE_POLY_SET(zone.GetFilledPolysList(layer))
+            core.Deflate(margin, pcbnew.CORNER_STRATEGY_ROUND_ALL_CORNERS, FromMM(0.01))
+            cores.append(core)
+        box = zone.GetBoundingBox()
+        placed = [t.GetPosition() for t in board.GetTracks()
+                  if t.GetClass() == "PCB_VIA" and t.GetNetCode() == zone.GetNetCode()]
+        step, pitch = FromMM(0.5), FromMM(STITCH_PITCH)
+        y = box.GetTop()
+        while y < box.GetBottom():
+            x = box.GetLeft()
+            while x < box.GetRight():
+                p = VECTOR2I(x, y)
+                if (all(core.Contains(p) for core in cores)
+                        and all((p - q).EuclideanNorm() >= pitch for q in placed)
+                        and all((p - pad.GetPosition()).EuclideanNorm() >= FromMM(1.6) for pad in pads)):
+                    via = pcbnew.PCB_VIA(board)
+                    via.SetPosition(p)
+                    via.SetWidth(pcbnew.F_Cu, FromMM(STITCH_VIA))
+                    via.SetDrill(FromMM(0.3))
+                    via.SetNet(zone.GetNet())
+                    board.Add(via)
+                    placed.append(p)
+                    count += 1
+                x += step
+            y += step
+    return count
+
+
 def finish(board_path, ses_path):
     board = pcbnew.LoadBoard(board_path)
     if not pcbnew.ImportSpecctraSES(board, ses_path):
@@ -194,12 +233,15 @@ def finish(board_path, ses_path):
         zone.SetNet(nets["/" + name])
         zone.SetZoneName(name)
         zone.SetLocalClearance(FromMM(0.3))
-        zone.SetMinThickness(FromMM(0.25))
+        zone.SetMinThickness(FromMM(1.0))    # no narrow strips of pour between tracks
         zone.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)       # solid, no thermal spokes
         zone.SetThermalReliefGap(FromMM(0.3))
         zone.SetThermalReliefSpokeWidth(FromMM(0.4))
         zone.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
+    added = stitch(board)
+    pcbnew.ZONE_FILLER(board).Fill(board.Zones())
+    print("stitched the ground pours with %d vias" % added)
     pcbnew.SaveBoard(board_path, board)
     tracks = [t for t in board.GetTracks()]
     vias = sum(1 for t in tracks if t.GetClass() == "PCB_VIA")
