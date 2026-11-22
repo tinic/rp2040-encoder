@@ -8,13 +8,25 @@ to four DRO connectors, and taps A, B, R, +5 V and 0 V of each. The taps go thro
 ISO7760F isolators to an RP2040-Zero.
 """
 
+import uuid
+
 AXES = ["X", "Y", "Z", "A"]
+
+_UUID_NAMESPACE = uuid.UUID("6f1d2c0e-8a47-4e0b-9a35-2f0d5b7c1e10")
+
+
+def uid(name):
+    """A stable identifier for a named thing, so that regenerating keeps schematic and board linked."""
+    return str(uuid.uuid5(_UUID_NAMESPACE, name))
+
 
 # 2x5 header pin -> DB9 pin for a ribbon crimped DB9 (wire n is header pin n).
 HEADER_TO_DB9 = {1: 1, 2: 6, 3: 2, 4: 7, 5: 3, 6: 8, 7: 4, 8: 9, 9: 5, 10: None}
 
-# DB9 pins of the "generic Chinese" glass scale pinout (ToAuto and others).
-DB9_5V, DB9_0V, DB9_A, DB9_B, DB9_R = 1, 2, 3, 4, 5
+# DB9 pins tapped. +5 V, 0 V, A and B are the "generic Chinese" glass scale pinout (ToAuto and
+# others). On the owner's scales pin 5 is not wired and the reference pulse is on pin 9; their
+# cables also join pin 3 with 6 and pin 4 with 8, which the board passes through unchanged.
+DB9_5V, DB9_0V, DB9_A, DB9_B, DB9_R = 1, 2, 3, 4, 9
 
 BOARD_W, BOARD_H = 143.0, 25.0
 
@@ -139,10 +151,12 @@ def build():
 
     # --- the controller
     add("U3", "zero", "RP2040-Zero", ZERO_X, ZERO_Y, -90.0)
-    # Every pin gets a net, also the unused ones: the isolation rule of the board goes by net
-    # class, and a pad without a net would count as machine side.
+    used = {gpio for chans in ISO_CHANNELS.values() for _, gpio in chans}
     for pin, name in ZERO_PINS.items():
-        nets[("U3", str(pin))] = {"3V3": "+3V3", "GND": "GND2", "5V": "VBUS"}.get(name, name)
+        if name in used:
+            nets[("U3", str(pin))] = name          # the other GPIOs and 5V stay unconnected
+    nets[("U3", "21")] = "+3V3"
+    nets[("U3", "22")] = "GND2"
 
     # --- mounting holes, both on the machine side
     add("H1", "hole", "M3", 3.6, 12.5)

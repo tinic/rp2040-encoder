@@ -319,19 +319,15 @@
     "netclass_patterns": [
       {
         "netclass": "Logic",
-        "pattern": "GP*"
+        "pattern": "/GP*"
       },
       {
         "netclass": "Logic",
-        "pattern": "+3V3"
+        "pattern": "/+3V3"
       },
       {
         "netclass": "Logic",
-        "pattern": "GND2"
-      },
-      {
-        "netclass": "Logic",
-        "pattern": "VBUS"
+        "pattern": "/GND2"
       }
     ]
   },

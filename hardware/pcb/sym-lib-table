@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "rp2040_encoder")(type "KiCad")(uri "${KIPRJMOD}/lib/rp2040_encoder.kicad_sym")(options "")(descr "Parts of the rp2040-encoder carrier board"))
+)

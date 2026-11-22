@@ -96,15 +96,17 @@ def place(board_path, dsn_path):
     netclass.SetViaDiameter(FromMM(0.6))
     netclass.SetViaDrill(FromMM(0.3))
 
+    # Net names as KiCad derives them from the schematic's local labels: with a leading slash.
     net_items = {}
     for name in sorted(set(nets.values())):
-        item = pcbnew.NETINFO_ITEM(board, name)
+        item = pcbnew.NETINFO_ITEM(board, "/" + name)
         board.Add(item)
         net_items[name] = item
 
     for part in parts:
         fp = load(part["kind"])
         fp.SetReference(part["ref"])
+        fp.SetPath(pcbnew.KIID_PATH("/" + D.uid("symbol " + part["ref"])))   # link to the schematic symbol
         fp.SetValue(part["value"])
         board.Add(fp)
         fp.SetOrientationDegrees(part["rot"])
@@ -116,9 +118,16 @@ def place(board_path, dsn_path):
             mid = VECTOR2I((min(xs) + max(xs)) // 2, (min(ys) + max(ys)) // 2)
             fp.Move(pt(part["x"], part["y"]) - mid)
         for pad in fp.Pads():
-            net = nets.get((part["ref"], pad.GetNumber()))
+            number = pad.GetNumber()
+            net = nets.get((part["ref"], number))
             if net:
                 pad.SetNet(net_items[net])
+            elif number and part["kind"] in ("idc", "zero"):
+                # an unconnected pin gets the net KiCad gives it from the schematic
+                pin_name = "Pin_" + number if part["kind"] == "idc" else D.ZERO_PINS[int(number)]
+                item = pcbnew.NETINFO_ITEM(board, "unconnected-(%s-%s-Pad%s)" % (part["ref"], pin_name, number))
+                board.Add(item)
+                pad.SetNet(item)
         if part["kind"] in ("hole", "r", "c", "cbulk"):
             # too dense for readable designators; they are on the fabrication layer
             fp.Reference().SetVisible(False)
@@ -179,7 +188,7 @@ def finish(board_path, ses_path):
     right = D.ISO_X + D.BARRIER_HALF + 0.1
     for name, x1, x2 in (("GND1", 0.0, left), ("GND2", right, D.BOARD_W)):
         zone = rect_zone(board, x1, 0.0, x2, D.BOARD_H, (pcbnew.F_Cu, pcbnew.B_Cu))
-        zone.SetNet(nets[name])
+        zone.SetNet(nets["/" + name])
         zone.SetZoneName(name)
         zone.SetLocalClearance(FromMM(0.3))
         zone.SetMinThickness(FromMM(0.25))

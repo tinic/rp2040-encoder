@@ -1,4 +1,5 @@
-# Regenerates the carrier board from gen/design.py: place, autoroute, pour, check, render.
+# Regenerates schematic and board from gen/design.py: schematic and its checks, then place,
+# autoroute, pour, check, render.
 #
 #   powershell -File gen\build.ps1 -Freerouting C:\path\to\freerouting-2.5.0.jar
 #
@@ -24,6 +25,15 @@ function Invoke-KiCadPython([string[]]$Arguments) {
     finally { $env:PATH, $env:PYTHONHOME, $env:PYTHONPATH = $old }
 }
 
+# schematic first: written from the same data, checked, and compared with it through KiCad's netlist
+$sch = Join-Path $pcbDir "rp2040-encoder-carrier.kicad_sch"
+$net = Join-Path $Work "carrier.net"
+Invoke-KiCadPython @((Join-Path $PSScriptRoot "gen_sch.py"), $sch)
+& "$kicad\kicad-cli.exe" sch erc --severity-all --format report --output (Join-Path $Work "erc.rpt") $sch | Select-String "Found"
+& "$kicad\kicad-cli.exe" sch export netlist --format kicadsexpr --output $net $sch | Out-Null
+Invoke-KiCadPython @((Join-Path $PSScriptRoot "check_netlist.py"), $net)
+& "$kicad\kicad-cli.exe" sch export pdf --output (Join-Path $pcbDir "rp2040-encoder-carrier.pdf") $sch | Out-Null
+
 Invoke-KiCadPython @((Join-Path $PSScriptRoot "gen_pcb.py"), "place", $board, $dsn)
 
 Remove-Item $ses -ErrorAction SilentlyContinue
@@ -42,4 +52,5 @@ Select-String -Path (Join-Path $Work "drc.rpt") -Pattern "^\[" | ForEach-Object 
     Group-Object | Sort-Object Count -Descending | ForEach-Object { "{0,4}  {1}" -f $_.Count, $_.Name }
 & "$kicad\kicad-cli.exe" pcb render --side top --width 3000 --height 700 --zoom 3.4 -o (Join-Path $Work "top.png") $board | Out-Null
 & "$kicad\kicad-cli.exe" pcb render --side bottom --width 3000 --height 700 --zoom 3.4 -o (Join-Path $Work "bottom.png") $board | Out-Null
-"renders and DRC report in $Work"
+Copy-Item (Join-Path $Work "top.png"), (Join-Path $Work "bottom.png") (Join-Path $pcbDir "renders") -Force
+"schematic PDF and renders in $pcbDir; reports in $Work"
