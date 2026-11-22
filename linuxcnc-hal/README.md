@@ -88,12 +88,13 @@ Things to know when using them:
 - A pulse is counted on an edge. An axis that stands on its reference mark when the
   device starts has `ref-state-N` true and `ref-count-N` 0 until it leaves the mark and
   crosses it again.
-- Firmware after v3.0.0 counts one edge per crossing: after an edge the input is ignored
-  until the axis has moved 32 counts away from it (0.16 mm at 0.005 mm per count), and
-  `ref-position-N` holds that first edge. Two crossings closer together than that count
-  once. Arming `index-enable-N` lets the input count again at once.
+- Firmware after v3.0.0 counts one edge per crossing: after an edge the input does not
+  count again until the axis has moved 32 counts away from it (0.16 mm at 0.005 mm per
+  count) and the input has been inactive, without an edge, for 2 ms. `ref-position-N`
+  holds that first edge. Two crossings closer together than that, in distance or in
+  time, count once. Arming `index-enable-N` lets the input count again at once.
 - Firmware v3.0.0 does not debounce the input: on one scale a slow pass over the mark
-  counted about 250 edges within a few counts, where passes by hand had counted one each,
+  counted about 100 edges within a few counts, where passes by hand had counted one each,
   and `ref-position-N` held the last of them. With that firmware treat a change of
   `ref-count-N` as "the mark was crossed", not as a number of crossings.
 - `ref-position-N` is in the count the scale had when the pulse arrived. Zeroing the

@@ -15,12 +15,15 @@ class QuadratureEncoder {
     static constexpr uint kPinsPerEncoder = 2;
     static constexpr uint kRefBasePin = 26;  // GP26=X, GP27=Y, GP28=Z, GP29=A
 
-    // After a reference edge the input of that encoder is ignored until its count is this far
-    // from the count at the edge. A reference pulse has slow flanks: an axis that moves slowly
-    // over the mark, or stops on its flank, would otherwise deliver hundreds of edges (about 250
-    // in one pass were seen on a 5 um glass scale, within a few counts). 32 counts is well
-    // outside that zone and far below the distance between two marks or two index pulses.
+    // After a reference edge the input of that encoder is not counted again until its count is
+    // kRefRearmCounts from the count at the edge AND the input has been inactive, without any
+    // edge, for kRefQuietUs. A reference pulse has slow, noisy flanks: an axis that moves slowly
+    // over the mark, or stops on its flank, would otherwise deliver many edges (about 100 in one
+    // pass were seen on a 5 um glass scale). On that scale the distance rule alone already gave
+    // one count per crossing; the quiet time is there for a flank that is longer or noisier.
+    // Both values are far below the distance and the time between two marks or index pulses.
     static constexpr int32_t kRefRearmCounts = 32;
+    static constexpr uint32_t kRefQuietUs = 2000;
 
     static constexpr uint8_t kAllAxesMask = (1U << kNumEncoders) - 1U;
     static constexpr uint8_t kDefaultRefEnableMask = kAllAxesMask;
@@ -75,10 +78,12 @@ class QuadratureEncoder {
     volatile uint8_t index_armed_mask = 0;
     volatile uint32_t ref_pulse_counts[kNumEncoders] = {};
     volatile int32_t ref_positions[kNumEncoders] = {};
-    // Bit N: the edge of encoder N has been counted and its interrupt is off until the axis
-    // has moved kRefRearmCounts away from ref_edge_counts[N], the raw count at that edge.
+    // Bit N: the pulse of encoder N has been counted. Until service_ref_inputs() lets it count
+    // again, every edge of that input only notes its time in ref_last_edge_us[N].
+    // ref_edge_counts[N] is the raw count at the counted edge.
     volatile uint8_t ref_holdoff_mask = 0;
     volatile int32_t ref_edge_counts[kNumEncoders] = {};
+    volatile uint32_t ref_last_edge_us[kNumEncoders] = {};
 
     std::array<int, kNumEncoders> dma_data_chans = {};
     std::array<int, kNumEncoders> dma_ctrl_chans = {};
