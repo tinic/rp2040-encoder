@@ -51,6 +51,23 @@ setp rp2040_encoder.0.scale-3 0.1    # A axis: 0.1 degrees per count
 # net z-zero-button => rp2040_encoder.0.reset-2
 # net a-zero-button => rp2040_encoder.0.reset-3
 
+# Reference (R / index) pulse inputs on GP26 (X), GP27 (Y), GP28 (Z), GP29 (A)
+# Enabled by default (internal pull-down keeps unwired pins quiet).
+# Set ref-invert-N to 1 for active-LOW (falling edge) reference pulses.
+# setp rp2040_encoder.0.ref-enable-0 1
+# setp rp2040_encoder.0.ref-invert-0 0
+#
+# Standard LinuxCNC index-enable handshake (e.g. for HOME_USE_INDEX):
+# net x-index-enable joint.0.index-enable <=> rp2040_encoder.0.index-enable-0
+# net y-index-enable joint.1.index-enable <=> rp2040_encoder.0.index-enable-1
+# net z-index-enable joint.2.index-enable <=> rp2040_encoder.0.index-enable-2
+# net a-index-enable joint.3.index-enable <=> rp2040_encoder.0.index-enable-3
+#
+# Passive monitoring of 50 mm glass-scale reference marks:
+#   rp2040_encoder.0.ref-position-N  (float out: position of last R pulse)
+#   rp2040_encoder.0.ref-count-N     (u32 out: total R pulses detected)
+#   rp2040_encoder.0.ref-state-N     (bit out: live logical level of R input)
+
 # Example: Connect to PyVCP panel for DRO display
 # net x-encoder-pos => pyvcp.x-dro
 # net y-encoder-pos => pyvcp.y-dro

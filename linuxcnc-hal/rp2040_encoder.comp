@@ -9,6 +9,12 @@ pin out float scale-fb-#[4] = -1e30 "Scale factor for each encoder";
 pin in float scale-#[4] "Scale factor for each encoder";
 pin in u32 reset-#[4] "Reset encoder position to zero (change in value triggered)";
 pin in s32 sign-#[4] = 1 "Per-axis sign: +1 normal, -1 inverts the position output";
+pin in bit ref-enable-#[4] = 1 "Enable reference (R) pulse recognition on GP26-GP29";
+pin in bit ref-invert-#[4] = 0 "Invert reference (R) pulse polarity: 0=active-high/rising, 1=active-low/falling";
+pin io bit index-enable-#[4] = 0 "LinuxCNC index-enable handshake: set 1 to arm zero-on-next-R; cleared to 0 on R pulse";
+pin out float ref-position-#[4] "Latched encoder position at the most recent reference (R) pulse";
+pin out u32 ref-count-#[4] "Count of reference (R) pulses detected";
+pin out bit ref-state-#[4] "Live logical state of reference (R) input on GP26-GP29";
 
 option userspace yes;
 option extra_link_args "-lusb-1.0";
@@ -39,10 +45,14 @@ option extra_link_args "-lusb-1.0";
 #define VENDOR_REQUEST_GET_VERSION 0x06
 #define VENDOR_REQUEST_BOOTSEL 0x07
 #define VENDOR_REQUEST_RESET_CONFIG 0x08
+#define VENDOR_REQUEST_SET_REF_CONFIG 0x09
+#define VENDOR_REQUEST_GET_REF_POSITION 0x0A
+#define VENDOR_REQUEST_ARM_INDEX 0x0B
 
 #define POSITION_DATA_SENTINEL 0x3F8A7C91
 #define SCALE_DATA_SENTINEL 0x7B2D4E8F
 #define VERSION_DATA_SENTINEL 0x5A1B9C3D
+#define REF_POSITION_DATA_SENTINEL 0x9C4E2A71
 
 static libusb_device_handle *dev_handle = NULL;
 static libusb_context *ctx = NULL;
@@ -51,6 +61,10 @@ static int last_test_mode = -1;
 static double last_scale[4] = {-1e30, -1e30, -1e30, -1e30};
 static double last_scale_fb[4] = {-1e30, -1e30, -1e30, -1e30};
 static int last_reset[4] = {0, 0, 0, 0};
+static int last_ref_enable_mask = -1;
+static int last_ref_invert_mask = -1;
+static int last_index_armed[4] = {0, 0, 0, 0};
+static uint32_t last_ref_count[4] = {0, 0, 0, 0};
 static double invalid_scale_value = -1e30;
 
 static void signal_handler(int /*sig*/) {
@@ -166,8 +180,10 @@ void user_mainloop(void) {
                             }
                         }
 
-                        // Reset test mode tracking to force resend
+                        // Reset test mode and reference tracking to force resend
                         last_test_mode = -1;
+                        last_ref_enable_mask = -1;
+                        last_ref_invert_mask = -1;
 
                         // Reset scale tracking to trigger initial read. Both
                         // last_scale (host -> device sync) and last_scale_fb
@@ -179,6 +195,8 @@ void user_mainloop(void) {
                         for (int i = 0; i < 4; i++) {
                             last_scale[i] = invalid_scale_value;
                             last_scale_fb[i] = invalid_scale_value;
+                            last_index_armed[i] = 0;
+                            last_ref_count[i] = 0;
                         }
 
                         // Give device time to initialize
@@ -253,7 +271,45 @@ void user_mainloop(void) {
                             }
                         }
                     }
-                    
+
+                    // Sync reference (R) pulse enable/polarity configuration
+                    {
+                        uint8_t enable_mask = 0;
+                        uint8_t invert_mask = 0;
+                        for (int i = 0; i < 4; i++) {
+                            if (ref_enable(i)) {
+                                enable_mask |= (uint8_t)(1U << i);
+                            }
+                            if (ref_invert(i)) {
+                                invert_mask |= (uint8_t)(1U << i);
+                            }
+                        }
+                        if ((int)enable_mask != last_ref_enable_mask ||
+                            (int)invert_mask != last_ref_invert_mask) {
+                            buffer[0] = VENDOR_REQUEST_SET_REF_CONFIG;
+                            buffer[1] = enable_mask;
+                            buffer[2] = invert_mask;
+                            r = libusb_bulk_transfer(dev_handle, EP_OUT, buffer, 3, &actual_length, 100);
+                            if (r == 0) {
+                                last_ref_enable_mask = (int)enable_mask;
+                                last_ref_invert_mask = (int)invert_mask;
+                            }
+                        }
+                    }
+
+                    // Sync LinuxCNC index-enable arming/disarming
+                    for (int i = 0; i < 4; i++) {
+                        int want_arm = (index_enable(i) && ref_enable(i)) ? 1 : 0;
+                        if (want_arm != last_index_armed[i]) {
+                            buffer[0] = VENDOR_REQUEST_ARM_INDEX;
+                            buffer[1] = (uint8_t)i;
+                            buffer[2] = (uint8_t)want_arm;
+                            r = libusb_bulk_transfer(dev_handle, EP_OUT, buffer, 3, &actual_length, 100);
+                            if (r == 0) {
+                                last_index_armed[i] = want_arm;
+                            }
+                        }
+                    }
                     
                     // Send position request
                     buffer[0] = VENDOR_REQUEST_GET_POSITION;
@@ -273,6 +329,54 @@ void user_mainloop(void) {
                                 // silently zeroing the axis.
                                 for (int i = 0; i < 4; i++) {
                                     position(i) = (sign(i) < 0 ? -1.0 : 1.0) * positions[i];
+                                }
+
+                                if (actual_length >= 56) {
+                                    uint8_t ref_live_mask = buffer[38];
+                                    uint8_t index_armed_mask = buffer[39];
+                                    uint32_t ref_counts[4];
+                                    memcpy(ref_counts, buffer + 40, sizeof(ref_counts));
+
+                                    int ref_changed = 0;
+                                    for (int i = 0; i < 4; i++) {
+                                        ref_state(i) = (ref_live_mask >> i) & 1;
+                                        ref_count(i) = ref_counts[i];
+                                        if (last_index_armed[i] && !((index_armed_mask >> i) & 1)) {
+                                            // RP2040 latched R and zeroed position(i) above.
+                                            index_enable(i) = 0;
+                                            last_index_armed[i] = 0;
+                                        }
+                                        if (ref_counts[i] != last_ref_count[i]) {
+                                            ref_changed = 1;
+                                        }
+                                    }
+
+                                    // Fetch latched ref positions only when a new R pulse occurred
+                                    if (ref_changed) {
+                                        uint8_t ref_buf[64];
+                                        int ref_len = 0;
+                                        ref_buf[0] = VENDOR_REQUEST_GET_REF_POSITION;
+                                        int rr = libusb_bulk_transfer(dev_handle, EP_OUT, ref_buf, 1, &ref_len, 100);
+                                        if (rr == 0) {
+                                            rr = libusb_bulk_transfer(dev_handle, EP_IN, ref_buf, sizeof(ref_buf),
+                                                                      &ref_len, 100);
+                                            if (rr == 0 && ref_len >= 52) {
+                                                uint32_t rsentinel = 0;
+                                                memcpy(&rsentinel, ref_buf, sizeof(rsentinel));
+                                                if (rsentinel == REF_POSITION_DATA_SENTINEL) {
+                                                    double ref_positions[4];
+                                                    uint32_t confirmed_counts[4];
+                                                    memcpy(ref_positions, ref_buf + 4, sizeof(ref_positions));
+                                                    memcpy(confirmed_counts, ref_buf + 36, sizeof(confirmed_counts));
+                                                    for (int i = 0; i < 4; i++) {
+                                                        ref_position(i) =
+                                                            (sign(i) < 0 ? -1.0 : 1.0) * ref_positions[i];
+                                                        last_ref_count[i] = confirmed_counts[i];
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         } else if (r == LIBUSB_ERROR_TIMEOUT) {

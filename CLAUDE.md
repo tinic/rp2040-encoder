@@ -40,11 +40,11 @@ make
 ## Hardware Configuration
 
 ### DRO Scale Connections
-The system supports 4 DRO scales with TTL level A/B quadrature signals connected to GPIO pins 0-7:
-- Encoder 0 (X-axis): GPIO 0 (A), GPIO 1 (B)
-- Encoder 1 (Y-axis): GPIO 2 (A), GPIO 3 (B)
-- Encoder 2 (Z-axis): GPIO 4 (A), GPIO 5 (B)
-- Encoder 3 (A-axis): GPIO 6 (A), GPIO 7 (B)
+The system supports 4 DRO scales with TTL level A/B quadrature signals connected to GPIO pins 0-7, plus optional reference (R / index) pulse inputs on GPIO pins 26-29:
+- Encoder 0 (X-axis): GPIO 0 (A), GPIO 1 (B), GPIO 26 (R)
+- Encoder 1 (Y-axis): GPIO 2 (A), GPIO 3 (B), GPIO 27 (R)
+- Encoder 2 (Z-axis): GPIO 4 (A), GPIO 5 (B), GPIO 28 (R)
+- Encoder 3 (A-axis): GPIO 6 (A), GPIO 7 (B), GPIO 29 (R)
 
 ### Encoder Scaling
 Scale factors convert encoder counts to meaningful units. Configure in main.cpp:
@@ -106,6 +106,9 @@ The device implements a vendor-specific USB interface with the following command
 - **0x03** - Set Scale: Sets scale factor for an encoder (requires 1 byte encoder index + 8 bytes double scale factor)
 - **0x04** - Get Scale: Returns 32 bytes (4 doubles) with scale factors for all encoders
 - **0x05** - Reset Encoder: Resets encoder position to zero (requires 1 byte encoder index)
+- **0x09** - Set Reference Config: Sets per-axis R-pulse enable and invert bitmasks (`[0x09, enable_mask, invert_mask]`, persisted in flash; default `enable_mask=0x0F`, `invert_mask=0x00`)
+- **0x0A** - Get Reference Position: Returns 64 bytes (`[sentinel 0x9C4E2A71: 4][4 doubles ref_positions: 32][4 uint32 ref_counts: 16]`)
+- **0x0B** - Arm Index: Arms or disarms LinuxCNC `index-enable` zero-on-next-R for an axis (`[0x0B, encoder_index, arm]`)
 
 Position data format: 4 double-precision floating point values (little-endian)
 

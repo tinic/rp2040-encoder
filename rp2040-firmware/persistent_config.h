@@ -15,16 +15,23 @@ class PersistentConfig {
  public:
     static constexpr size_t kNumScales = 4;
 
-    // Returns true and populates `scales` if a valid blob was loaded;
-    // returns false otherwise (first boot, corruption, unknown schema).
-    // On false, `scales` is left untouched.
-    [[nodiscard]] static bool load(std::array<double, kNumScales>& scales);
+    struct Settings {
+        std::array<double, kNumScales> scale_factors{};
+        uint8_t ref_enable_mask = 0x0FU;
+        uint8_t ref_invert_mask = 0x00U;
+    };
 
-    // Atomically writes `scales` to flash. Takes ~50 ms (sector erase +
+    // Returns true and populates `settings` if a valid blob was loaded;
+    // returns false otherwise (first boot, corruption, unknown schema).
+    // Schema v1 blobs (scales only) are transparently upgraded with default
+    // reference-pulse settings. On false, `settings` is left untouched.
+    [[nodiscard]] static bool load(Settings& settings);
+
+    // Atomically writes `settings` to flash. Takes ~50 ms (sector erase +
     // page program) and disables interrupts during the flash op; USB
     // packets may be queued briefly but DMA encoder draining continues
     // on the AHB bus and counts cannot be lost.
-    static bool save(const std::array<double, kNumScales>& scales);
+    static bool save(const Settings& settings);
 
     // Erases the flash sector. Subsequent load() returns false.
     static void erase();

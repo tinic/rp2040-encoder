@@ -18,6 +18,12 @@ class Position {
     void init();
     std::array<double, kPositions> positions{};
     std::array<double, kPositions> scale_factors{};
+    std::array<double, kPositions> ref_positions{};
+    std::array<uint32_t, kPositions> ref_pulse_counts{};
+    uint8_t ref_enable_mask = QuadratureEncoder::kDefaultRefEnableMask;
+    uint8_t ref_invert_mask = QuadratureEncoder::kDefaultRefInvertMask;
+    uint8_t ref_live_mask = 0;
+    uint8_t index_armed_mask = 0;
 
     // True iff init() pulled a valid blob from flash. Read once at boot via
     // should_apply_defaults() to decide whether main.cpp's compile-time
@@ -46,8 +52,11 @@ class Position {
     static Position& instance();
 
     [[nodiscard]] bool get(uint8_t* out, size_t& bytes);
+    [[nodiscard]] bool get_ref_positions(uint8_t* out, size_t& bytes);
 
     void set_scale(size_t pos, double scale);
+    void set_ref_config(uint8_t enable_mask, uint8_t invert_mask);
+    void arm_index(size_t pos, bool arm);
 
     // True at boot when init() found NO valid persisted config. main.cpp
     // gates its compile-time defaults on this so that USB-set scales are

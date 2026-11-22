@@ -160,6 +160,23 @@ void USBDevice::task() const {
                 // In-RAM scale_factors are not modified by this call.
                 Position::instance().reset_persistent_config();
                 break;
+            case VENDOR_REQUEST_SET_REF_CONFIG:
+                if (count >= 3) {
+                    Position::instance().set_ref_config(request_buf[1], request_buf[2]);
+                }
+                break;
+            case VENDOR_REQUEST_GET_REF_POSITION:
+                (void)send_ref_position_data();
+                break;
+            case VENDOR_REQUEST_ARM_INDEX:
+                if (count >= 3) {
+                    const uint8_t encoder_index = request_buf[1];
+                    const bool arm = request_buf[2] != 0;
+                    if (encoder_index < Position::kPositions) {
+                        Position::instance().arm_index(encoder_index, arm);
+                    }
+                }
+                break;
             default:
                 break;
         }
@@ -176,9 +193,39 @@ bool USBDevice::send_position_data() const {
     }
 
     static std::array<uint8_t, 64> buffer{};
+    buffer.fill(0);
     size_t bytes = 0;
 
     if (!Position::instance().get(buffer.data(), bytes)) {
+        return false;
+    }
+
+    if (tud_vendor_n_write_available(VENDOR_INTERFACE) < buffer.size()) {
+        return false;
+    }
+
+    const uint32_t written = tud_vendor_n_write(VENDOR_INTERFACE, buffer.data(), buffer.size());
+    if (buffer.size() != written) {
+        return false;
+    }
+    tud_vendor_n_write_flush(VENDOR_INTERFACE);
+    return true;
+}
+
+bool USBDevice::send_ref_position_data() const {
+    if (!initialized) {
+        return false;
+    }
+
+    if (!tud_vendor_n_mounted(VENDOR_INTERFACE)) {
+        return false;
+    }
+
+    static std::array<uint8_t, 64> buffer{};
+    buffer.fill(0);
+    size_t bytes = 0;
+
+    if (!Position::instance().get_ref_positions(buffer.data(), bytes)) {
         return false;
     }
 

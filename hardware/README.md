@@ -51,6 +51,19 @@ and isolates the machine's electrical environment from the USB host PC.
 | 2       | Z    | GPIO 4 (A)  | OUTE (pin 11)   | INE (pin 6)    | A        |
 | 2       | Z    | GPIO 5 (B)  | OUTF (pin 10)   | INF (pin 7)    | B        |
 
+### Optional Reference (R / Index) Pulse Inputs
+
+Glass scales with a reference/index track (e.g. 50 mm periodic marks on Sino/Ditron/TOAUTO scales, typically DB9 pin 8) can be connected to **GP26–GP29** (on the right-side header of the RP2040-Zero, next to `3V3`/`GND`):
+
+| Encoder | Axis | RP2040 GPIO | Signal | Notes |
+|---------|------|-------------|--------|-------|
+| 0       | X    | GPIO 26     | R (Index) | Enabled by default; internal pull-down keeps unwired pins quiet |
+| 1       | Y    | GPIO 27     | R (Index) | Enabled by default; internal pull-down keeps unwired pins quiet |
+| 2       | Z    | GPIO 28     | R (Index) | Enabled by default; internal pull-down keeps unwired pins quiet |
+| 3       | A    | GPIO 29     | R (Index) | Enabled by default; internal pull-down keeps unwired pins quiet |
+
+Because the primary `ISO7760FDBQR` consumes all 6 channels for X/Y/Z A+B, wire R signals through an additional 3.3 V-output isolator (such as an `ISO7740F` for 4 channels) — never feed 5 V directly into GP26–GP29. When unused, leave GP26–GP29 disconnected; internal pull-downs prevent floating interrupts and main position counting is unaffected unless `index-enable-N` is armed.
+
 Power and ground:
 
 | ISO7760F pin | Net          | Notes                          |

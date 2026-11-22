@@ -18,14 +18,21 @@ Position& Position::instance() {
 }
 
 void Position::init() {
-    QuadratureEncoder::instance();
+    QuadratureEncoder& enc = QuadratureEncoder::instance();
     // If the flash sector holds a valid blob, those values override the
     // compile-time defaults in main.cpp; main.cpp reads should_apply_defaults()
     // and skips its set_scale() calls when load() succeeded. Without that gate
     // the dedup in set_scale() only no-ops when the persisted value happens
     // to equal the hardcoded default — every other USB-set scale would be
     // silently overwritten on the next boot.
-    config_loaded = PersistentConfig::load(scale_factors);
+    PersistentConfig::Settings settings{};
+    config_loaded = PersistentConfig::load(settings);
+    if (config_loaded) {
+        scale_factors = settings.scale_factors;
+        ref_enable_mask = static_cast<uint8_t>(settings.ref_enable_mask & QuadratureEncoder::kAllAxesMask);
+        ref_invert_mask = static_cast<uint8_t>(settings.ref_invert_mask & QuadratureEncoder::kAllAxesMask);
+        enc.set_ref_config(ref_enable_mask, ref_invert_mask);
+    }
 }
 
 void Position::set_scale(size_t pos, double scale) {
@@ -40,6 +47,26 @@ void Position::set_scale(size_t pos, double scale) {
     config_dirty_since_ms = to_ms_since_boot(get_absolute_time());
 }
 
+void Position::set_ref_config(uint8_t enable_mask, uint8_t invert_mask) {
+    const uint8_t masked_enable = static_cast<uint8_t>(enable_mask & QuadratureEncoder::kAllAxesMask);
+    const uint8_t masked_invert = static_cast<uint8_t>(invert_mask & QuadratureEncoder::kAllAxesMask);
+    if (ref_enable_mask == masked_enable && ref_invert_mask == masked_invert) {
+        return;  // dedup: no-op writes do not arm the auto-save
+    }
+    ref_enable_mask = masked_enable;
+    ref_invert_mask = masked_invert;
+    QuadratureEncoder::instance().set_ref_config(ref_enable_mask, ref_invert_mask);
+    config_dirty = true;
+    config_dirty_since_ms = to_ms_since_boot(get_absolute_time());
+}
+
+void Position::arm_index(size_t pos, bool arm) {
+    if (!initialized || pos >= kPositions) {
+        return;
+    }
+    QuadratureEncoder::instance().arm_index(pos, arm);
+}
+
 void Position::tick() {
     if (!config_dirty) {
         return;
@@ -48,7 +75,11 @@ void Position::tick() {
     if (now - config_dirty_since_ms < kAutoSaveDebounceMs) {
         return;
     }
-    PersistentConfig::save(scale_factors);
+    PersistentConfig::Settings settings{};
+    settings.scale_factors = scale_factors;
+    settings.ref_enable_mask = ref_enable_mask;
+    settings.ref_invert_mask = ref_invert_mask;
+    PersistentConfig::save(settings);
     config_dirty = false;
 }
 
@@ -68,22 +99,68 @@ bool Position::get(uint8_t* out, size_t& bytes) {
         update_from_encoders();
     }
 
-    bytes = sizeof(uint32_t) + sizeof(positions);
+    // Layout (56 bytes within the 64-byte USB packet):
+    //   [0..3]   uint32_t sentinel (POSITION_DATA_SENTINEL)
+    //   [4..35]  double   positions[4]
+    //   [36]     uint8_t  ref_enable_mask
+    //   [37]     uint8_t  ref_invert_mask
+    //   [38]     uint8_t  ref_live_mask
+    //   [39]     uint8_t  index_armed_mask
+    //   [40..55] uint32_t ref_pulse_counts[4]
+    bytes = sizeof(uint32_t) + sizeof(positions) + 4U + sizeof(ref_pulse_counts);
     if (out != nullptr) {
         uint32_t sentinel = USBDevice::POSITION_DATA_SENTINEL;
         memcpy(out, &sentinel, sizeof(sentinel));
-
         memcpy(out + sizeof(sentinel), reinterpret_cast<const uint8_t*>(positions.data()), sizeof(positions));
+
+        const size_t meta_offset = sizeof(sentinel) + sizeof(positions);
+        out[meta_offset + 0U] = ref_enable_mask;
+        out[meta_offset + 1U] = ref_invert_mask;
+        out[meta_offset + 2U] = ref_live_mask;
+        out[meta_offset + 3U] = index_armed_mask;
+        memcpy(out + meta_offset + 4U, reinterpret_cast<const uint8_t*>(ref_pulse_counts.data()),
+               sizeof(ref_pulse_counts));
+    }
+
+    return true;
+}
+
+bool Position::get_ref_positions(uint8_t* out, size_t& bytes) {
+    if (!initialized) {
+        return false;
+    }
+
+    if (!test_mode) {
+        update_from_encoders();
+    }
+
+    // Layout (52 bytes within the 64-byte USB packet):
+    //   [0..3]   uint32_t sentinel (REF_POSITION_DATA_SENTINEL)
+    //   [4..35]  double   ref_positions[4]
+    //   [36..51] uint32_t ref_pulse_counts[4]
+    bytes = sizeof(uint32_t) + sizeof(ref_positions) + sizeof(ref_pulse_counts);
+    if (out != nullptr) {
+        uint32_t sentinel = USBDevice::REF_POSITION_DATA_SENTINEL;
+        memcpy(out, &sentinel, sizeof(sentinel));
+        memcpy(out + sizeof(sentinel), reinterpret_cast<const uint8_t*>(ref_positions.data()), sizeof(ref_positions));
+        memcpy(out + sizeof(sentinel) + sizeof(ref_positions),
+               reinterpret_cast<const uint8_t*>(ref_pulse_counts.data()), sizeof(ref_pulse_counts));
     }
 
     return true;
 }
 
 void Position::update_from_encoders() {
-    std::array<int32_t, kPositions> counts{};
-    QuadratureEncoder::instance().get_all_counts(counts);
+    QuadratureEncoder::Snapshot snap{};
+    QuadratureEncoder::instance().get_snapshot(snap);
+    ref_enable_mask = snap.ref_enable_mask;
+    ref_invert_mask = snap.ref_invert_mask;
+    ref_live_mask = snap.ref_live_mask;
+    index_armed_mask = snap.index_armed_mask;
+    ref_pulse_counts = snap.ref_pulse_counts;
     for (size_t i = 0; i < kPositions; i++) {
-        positions[i] = static_cast<double>(counts[i]) * scale_factors[i];
+        positions[i] = static_cast<double>(snap.counts[i]) * scale_factors[i];
+        ref_positions[i] = static_cast<double>(snap.ref_counts[i]) * scale_factors[i];
     }
 }
 
