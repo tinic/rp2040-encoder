@@ -8,6 +8,7 @@ them in stock; JLCPCB had none of the narrow package), the four DB9 sockets, the
 """
 import csv
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,7 +17,9 @@ import zipfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import design as D  # noqa: E402
 
-KICAD_CLI = r"C:\Program Files\KiCad\10.0\bin\kicad-cli.exe"
+# kicad-cli: $KICAD_CLI, else the one on the PATH, else the Windows default
+KICAD_CLI = (os.environ.get("KICAD_CLI") or shutil.which("kicad-cli")
+             or r"C:\Program Files\KiCad\10.0\bin\kicad-cli.exe")
 NAME = "rp2040-encoder-carrier-r2"
 
 # (kind, value) -> (JLCPCB/LCSC part number, description for the BOM's comment column).
