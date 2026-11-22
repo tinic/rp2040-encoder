@@ -21,6 +21,8 @@ PROJECT_FP = os.path.join(os.path.dirname(HERE), "lib", "rp2040_encoder.pretty")
 
 ROUTER_EDGE_INSET = 0.5   # mm
 MIN_TRACK = 0.15          # mm
+POWER_TRACK = 0.4         # mm
+POWER_NETS = ("/VCC1", "/VCC1_RAW", "/?_D1")
 
 
 def pt(x, y):
@@ -99,6 +101,15 @@ def place(board_path, dsn_path):
     netclass.SetTrackWidth(FromMM(0.25))
     netclass.SetViaDiameter(FromMM(0.6))
     netclass.SetViaDrill(FromMM(0.3))
+    # supply nets of the machine side get wider tracks (the same class is in the project file)
+    power = pcbnew.NETCLASS("Power")
+    power.SetClearance(FromMM(0.2))
+    power.SetTrackWidth(FromMM(POWER_TRACK))
+    power.SetViaDiameter(FromMM(0.6))
+    power.SetViaDrill(FromMM(0.3))
+    settings.m_NetSettings.SetNetclass("Power", power)
+    for pattern in POWER_NETS:
+        settings.m_NetSettings.SetNetclassPatternAssignment(pattern, "Power")
 
     # Net names as KiCad derives them from the schematic's local labels: with a leading slash.
     net_items = {}
